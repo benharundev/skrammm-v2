@@ -44,6 +44,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Prisma client binaries
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+# Prisma CLI (needed for migrate deploy in CMD)
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
 # Prisma schema for migrate deploy
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
@@ -52,4 +54,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-CMD ["node", "server.js"]
+# Run migrations before starting the server so depends_on health checks are respected
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]

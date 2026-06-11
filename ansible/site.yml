@@ -4,7 +4,7 @@
 # Pre-requisites (run once manually before this playbook):
 #   1. SSH into VPS as root
 #   2. adduser ubuntu && usermod -aG sudo ubuntu
-#   3. ssh-copy-id -i ~/.ssh/skrammm_deploy.pub ubuntu@<VPS_IP>
+#   3. ssh-copy-id -i ~/.ssh/shinjuru_deploy.pub ubuntu@<VPS_IP>
 #   4. sudo mkdir -p /opt/skrammm && sudo chown ubuntu:ubuntu /opt/skrammm
 #   5. nano /opt/skrammm/.env && chmod 600 /opt/skrammm/.env  (fill all secrets)
 #
