@@ -52,6 +52,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            NEXT_PUBLIC_APP_URL=https://app.skrammm.com
         env:
           NEXT_TELEMETRY_DISABLED: 1
 

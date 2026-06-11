@@ -15,6 +15,9 @@ COPY . .
 # Generate Prisma client before build
 RUN pnpm db:generate
 ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* vars are inlined at build time — must be passed as build args
+ARG NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 RUN pnpm build
 
 # Stage 3: runner — minimal image
