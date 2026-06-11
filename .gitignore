@@ -38,6 +38,9 @@ test-results/
 
 # Misc
 *.pem
+*.pub
+shinjuru_deploy
+shinjuru_deploy.pub
 .superpowers/
 
 # Local-only development and tooling files
