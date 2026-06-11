@@ -1,0 +1,20 @@
+---
+# Provision a fresh Ubuntu VPS on GCP Compute Engine for Skrammm.
+# Run: ansible-playbook -i inventory.yml site.yml
+# Dry-run: ansible-playbook -i inventory.yml site.yml --check
+
+- name: Provision Skrammm production server
+  hosts: skrammm_prod
+  become: true
+
+  vars:
+    app_dir: /opt/skrammm
+    data_dir: /data/postgres
+    gcp_region: asia-southeast1
+    artifact_registry: asia-southeast1-docker.pkg.dev
+
+  roles:
+    - role: docker
+    - role: nginx
+    - role: ufw
+    - role: app

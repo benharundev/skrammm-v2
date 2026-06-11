@@ -1,0 +1,58 @@
+---
+- name: Create app directory
+  file:
+    path: /opt/skrammm
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Create Postgres data directory
+  file:
+    path: /data/postgres
+    state: directory
+    owner: "999"  # postgres UID inside the container
+    group: "999"
+    mode: "0700"
+
+- name: Copy docker-compose.yml
+  copy:
+    src: "{{ playbook_dir }}/../docker/docker-compose.yml"
+    dest: /opt/skrammm/docker-compose.yml
+    owner: "{{ ansible_user }}"
+    mode: "0644"
+
+- name: Copy postgres-init.sql
+  copy:
+    src: "{{ playbook_dir }}/../docker/postgres-init.sql"
+    dest: /opt/skrammm/postgres-init.sql
+    owner: "{{ ansible_user }}"
+    mode: "0644"
+
+- name: Create systemd service for docker-compose
+  copy:
+    dest: /etc/systemd/system/skrammm.service
+    content: |
+      [Unit]
+      Description=Skrammm App
+      Requires=docker.service
+      After=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/skrammm
+      EnvironmentFile=/opt/skrammm/.env
+      ExecStart=/usr/bin/docker compose up -d
+      ExecStop=/usr/bin/docker compose down
+      TimeoutStartSec=300
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+
+- name: Enable skrammm service
+  systemd:
+    name: skrammm
+    enabled: true
+    daemon_reload: true

@@ -1,0 +1,60 @@
+---
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: true
+
+- name: Create SSL cert directory
+  file:
+    path: /etc/ssl/skrammm
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Copy Cloudflare Origin certificate
+  copy:
+    src: "{{ playbook_dir }}/../docker/certs/cloudflare-origin.crt"
+    dest: /etc/ssl/skrammm/cloudflare-origin.crt
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: Copy Cloudflare Origin private key
+  copy:
+    src: "{{ playbook_dir }}/../docker/certs/cloudflare-origin.key"
+    dest: /etc/ssl/skrammm/cloudflare-origin.key
+    owner: root
+    group: root
+    mode: "0600"
+  notify: reload nginx
+
+- name: Deploy Nginx config
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: nginx -t -c %s
+  notify: reload nginx
+
+- name: Remove default Nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Enable and start Nginx
+  systemd:
+    name: nginx
+    enabled: true
+    state: started
+
+handlers:
+  - name: reload nginx
+    systemd:
+      name: nginx
+      state: reloaded

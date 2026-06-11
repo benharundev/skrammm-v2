@@ -14,12 +14,13 @@ on:
 
 env:
   PNPM_VERSION: 9.15.0
-  AWS_REGION: ap-southeast-1
-  ECR_REPOSITORY: skrammm
+  GCP_REGION: asia-southeast1
+  ARTIFACT_REGISTRY: asia-southeast1-docker.pkg.dev
+  IMAGE_REPO: skrammm/app
 
 jobs:
   deploy:
-    name: Build → Push ECR → Deploy EC2
+    name: Build → Push Artifact Registry → Deploy GCE
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'production' }}
 
@@ -30,20 +31,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Authenticate to Google Cloud (Workload Identity)
+        id: auth
+        uses: google-github-actions/auth@v2
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
 
-      - name: Login to ECR
-        id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ARTIFACT_REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Build and push image with both :sha and :latest tags
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -53,35 +57,39 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
-            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+            ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.IMAGE_REPO }}:${{ github.sha }}
+            ${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.IMAGE_REPO }}:latest
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
-      # Deploy via SSM Run Command — no public SSH needed (TECH_PRD §15.2)
-      - name: Deploy to EC2 via SSM
-        run: |
-          INSTANCE_ID="${{ secrets.EC2_INSTANCE_ID }}"
-          ECR_IMAGE="${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+      # Deploy via SSH — Ansible provisions the key; GH secret holds the private key
+      - name: Deploy to Compute Engine via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: ${{ secrets.GCP_VM_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          envs: ARTIFACT_REGISTRY,GCP_PROJECT_ID,IMAGE_REPO
+          script: |
+            IMAGE="${{ env.ARTIFACT_REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.IMAGE_REPO }}:${{ github.sha }}"
 
-          aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "commands=[
-              'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}',
-              'docker pull $ECR_IMAGE',
-              'cd /opt/skrammm',
-              'ECR_IMAGE=$ECR_IMAGE docker compose pull nextjs',
-              'docker compose run --rm nextjs node_modules/.bin/prisma migrate deploy',
-              'ECR_IMAGE=$ECR_IMAGE docker compose up -d nextjs',
-              'sleep 10',
-              'curl -sf http://localhost:3000/api/health || (echo \"Health check failed — rolling back\" && ECR_IMAGE=$(docker compose images -q nextjs) && exit 1)'
-            ]" \
-            --timeout-seconds 300 \
-            --output-s3-bucket-name "${{ secrets.SSM_LOGS_BUCKET }}" \
-            --query "Command.CommandId" \
-            --output text
+            # Authenticate Docker to Artifact Registry using the VM's service account
+            gcloud auth configure-docker ${{ env.ARTIFACT_REGISTRY }} --quiet
 
-      - name: Verify health check
-        run: |
-          echo "Deployment complete. Monitor health at ${{ secrets.APP_URL }}/api/health"
+            docker pull "$IMAGE"
+
+            cd /opt/skrammm
+
+            # Run migrations before swapping the container
+            IMAGE="$IMAGE" docker compose run --rm nextjs node_modules/.bin/prisma migrate deploy
+
+            # Swap to new image with zero-downtime restart
+            IMAGE="$IMAGE" docker compose up -d nextjs
+
+            sleep 10
+
+            curl -sf http://localhost:3000/api/health || \
+              (echo "Health check failed" && exit 1)
+
+      - name: Verify deployment
+        run: echo "Deployment complete. Health at ${{ secrets.APP_URL }}/api/health"

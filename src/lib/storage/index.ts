@@ -1,30 +1,27 @@
-import {
-  S3Client,
-  DeleteObjectCommand,
-  PutObjectCommand,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Storage } from "@google-cloud/storage";
 
-const s3 = new S3Client({ region: process.env.AWS_REGION ?? "ap-southeast-1" });
+// On GCP Compute Engine, authentication is automatic via the attached service account.
+// For local dev, set GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa-key.json
+const storage = new Storage();
 
-const ASSETS_BUCKET = process.env.S3_BUCKET_ASSETS ?? "skram-assets";
+const ASSETS_BUCKET = process.env.GCS_BUCKET_ASSETS ?? "skram-assets";
 const CDN_URL = process.env.CLOUDFLARE_CDN_URL ?? "https://assets.skrammm.com";
 
 // ---------------------------------------------------------------------------
-// Pre-signed upload URL (15-minute TTL) — client uploads directly to S3
+// Pre-signed upload URL (15-minute TTL) — client uploads directly to GCS
 // ---------------------------------------------------------------------------
 
 export async function getUploadUrl(
   key: string,
   contentType: string
 ): Promise<string> {
-  const command = new PutObjectCommand({
-    Bucket: ASSETS_BUCKET,
-    Key: key,
-    ContentType: contentType,
-    CacheControl: "public, max-age=0, must-revalidate",
+  const [url] = await storage.bucket(ASSETS_BUCKET).file(key).getSignedUrl({
+    version: "v4",
+    action: "write",
+    expires: Date.now() + 15 * 60 * 1000,
+    contentType,
   });
-  return getSignedUrl(s3, command, { expiresIn: 900 });
+  return url;
 }
 
 // ---------------------------------------------------------------------------
@@ -40,9 +37,7 @@ export function getPublicUrl(key: string): string {
 // ---------------------------------------------------------------------------
 
 export async function deleteObject(key: string): Promise<void> {
-  await s3.send(
-    new DeleteObjectCommand({ Bucket: ASSETS_BUCKET, Key: key })
-  );
+  await storage.bucket(ASSETS_BUCKET).file(key).delete();
 }
 
 // ---------------------------------------------------------------------------

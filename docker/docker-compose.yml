@@ -1,7 +1,8 @@
 version: "3.9"
 
-# Production compose — used on EC2
-# Postgres data lives on a dedicated EBS gp3 volume mounted at /data/postgres
+# Production compose — GCP Compute Engine (Ubuntu VPS)
+# Nginx runs natively on the host (via Ansible), not as a container.
+# Postgres data lives on a GCP Persistent Disk mounted at /data/postgres.
 
 services:
   postgres:
@@ -23,19 +24,23 @@ services:
       retries: 5
 
   nextjs:
-    image: ${ECR_IMAGE}
+    image: ${IMAGE}
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: postgresql://skram:${POSTGRES_PASSWORD}@postgres:5432/skram
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      # AWS SES — kept on AWS for transactional email
       AWS_REGION: ${AWS_REGION}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       SES_FROM_ADDRESS: ${SES_FROM_ADDRESS}
-      S3_BUCKET_ASSETS: ${S3_BUCKET_ASSETS}
-      S3_BUCKET_BACKUPS: ${S3_BUCKET_BACKUPS}
+      # GCS — file storage on Google Cloud Storage
+      GCS_BUCKET_ASSETS: ${GCS_BUCKET_ASSETS}
+      GCS_BUCKET_BACKUPS: ${GCS_BUCKET_BACKUPS}
       CLOUDFLARE_CDN_URL: ${CLOUDFLARE_CDN_URL}
       QR_HMAC_SECRET: ${QR_HMAC_SECRET}
       SENTRY_DSN: ${SENTRY_DSN}
@@ -67,20 +72,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-
-  nginx:
-    image: nginx:1.27-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/nginx/certs:/etc/nginx/certs:ro
-    depends_on:
-      - nextjs
-    networks:
-      - internal
 
 networks:
   internal:

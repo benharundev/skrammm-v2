@@ -1,0 +1,7 @@
+all:
+  hosts:
+    skrammm_prod:
+      ansible_host: "{{ lookup('env', 'GCP_VM_IP') }}"
+      ansible_user: "{{ lookup('env', 'GCP_VM_USER') | default('ubuntu') }}"
+      ansible_ssh_private_key_file: "~/.ssh/skrammm_deploy"
+      ansible_python_interpreter: /usr/bin/python3

@@ -273,6 +273,47 @@ Tokens live in `src/styles/theme.css` as CSS custom properties. Tailwind v4 pick
 
 ## Deployment
 
-Production uses `docker/docker-compose.yml` (Next.js standalone + Postgres 16 + Nginx). AWS secrets are provided via EC2 IAM role — no credentials in environment. Production database migrations: `pnpm db:migrate:deploy`.
+Production runs on a **GCP Compute Engine Ubuntu VPS** with Docker Compose. Nginx runs natively on the host (not in Docker), managed by Ansible. Cloudflare sits in front for DNS, DDoS, WAF, and SSL termination.
 
-Nginx requirement for SSE: `proxy_buffering off` on the `/api/stream/*` location block.
+### Stack
+
+| Layer | Technology |
+|---|---|
+| Edge | Cloudflare (DNS, DDoS, WAF, Global SSL/TLS) |
+| Host OS | Ubuntu VPS on GCP Compute Engine |
+| Firewall | UFW (ports 22, 80, 443 only) |
+| Reverse proxy | Nginx (native, via `apt`) with Cloudflare Origin cert |
+| App containers | Docker Compose — Next.js + PostgreSQL 16 + Redis 7 |
+| File storage | GCP Cloud Storage + Cloudflare CDN |
+| Email | AWS SES (kept for transactional email) |
+| Container registry | GCP Artifact Registry |
+| IaC | Ansible (`ansible/site.yml`) |
+
+### Provisioning a new server
+
+```bash
+# Set target VM
+export GCP_VM_IP=<vm-external-ip>
+export GCP_VM_USER=ubuntu
+
+# Place Cloudflare Origin cert in docker/certs/ first
+ansible-playbook -i ansible/inventory.yml ansible/site.yml
+```
+
+The playbook installs Docker, Nginx, UFW, and sets up the systemd service for the app.
+
+### CI/CD
+
+Push to `main` → GitHub Actions builds the Docker image → pushes to Artifact Registry → SSHs into the VM, pulls the new image, runs `prisma migrate deploy`, and swaps the container.
+
+Required GitHub secrets: `GCP_WIF_PROVIDER`, `GCP_SA_EMAIL`, `GCP_PROJECT_ID`, `GCP_VM_IP`, `GCP_VM_USER`, `GCP_SSH_KEY`, `APP_URL`.
+
+### Manual deploy
+
+```bash
+# On the VM
+cd /opt/skrammm
+IMAGE=asia-southeast1-docker.pkg.dev/<project>/skrammm/app:<sha> docker compose up -d nextjs
+```
+
+Production database migrations: `pnpm db:migrate:deploy` (run inside the container via `docker compose run --rm nextjs`).
