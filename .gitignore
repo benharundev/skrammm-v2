@@ -39,3 +39,13 @@ test-results/
 # Misc
 *.pem
 .superpowers/
+
+# Local-only development and tooling files
+CLAUDE.md
+GEMINI.md
+PRD_Skrammm/
+.agents/
+.claude/
+docs/superpowers/
+.vscode/
+tsconfig.tsbuildinfo
