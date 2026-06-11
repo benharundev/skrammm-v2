@@ -4,7 +4,7 @@ FROM node:20-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --shamefully-hoist
+RUN pnpm install --frozen-lockfile
 
 # Stage 2: builder
 FROM node:20-alpine AS builder
@@ -12,8 +12,16 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Generate Prisma client before build
-RUN pnpm db:generate
+# Generate Prisma client before build.
+# pnpm writes the generated client into its virtual store (.pnpm/.../@prisma/client)
+# rather than node_modules/.prisma. Find it and copy to the root so the runner-stage
+# COPY instruction can reach it at a predictable path.
+RUN pnpm db:generate && \
+    if [ ! -d "/app/node_modules/.prisma" ]; then \
+      PRISMA_DIR=$(find /app/node_modules/.pnpm -name ".prisma" -type d 2>/dev/null | head -1); \
+      [ -n "$PRISMA_DIR" ] && cp -rL "$PRISMA_DIR" /app/node_modules/.prisma \
+        || (echo "ERROR: .prisma not found in pnpm store after generate" && exit 1); \
+    fi
 ENV NEXT_TELEMETRY_DISABLED=1
 # NEXT_PUBLIC_* vars are inlined at build time — must be passed as build args
 ARG NEXT_PUBLIC_APP_URL
