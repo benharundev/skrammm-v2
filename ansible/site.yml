@@ -8,8 +8,8 @@
 #   4. sudo mkdir -p /opt/skrammm && sudo chown ubuntu:ubuntu /opt/skrammm
 #   5. nano /opt/skrammm/.env && chmod 600 /opt/skrammm/.env  (fill all secrets)
 #
-# Run:      VPS_IP=x.x.x.x VPS_USER=ubuntu CR_PAT=ghp_xxx ansible-playbook -i inventory.yml site.yml
-# Dry-run:  ... ansible-playbook -i inventory.yml site.yml --check
+# Run:      CR_PAT=ghp_xxx ansible-playbook -i inventory.yml site.yml -e "vps_ip=x.x.x.x" -e "vps_user=ubuntu"
+# Dry-run:  CR_PAT=ghp_xxx ansible-playbook -i inventory.yml site.yml -e "vps_ip=x.x.x.x" --check
 
 - name: Provision Skrammm production server
   hosts: skrammm_prod
