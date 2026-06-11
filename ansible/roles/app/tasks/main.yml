@@ -29,6 +29,21 @@
     owner: "{{ ansible_user }}"
     mode: "0644"
 
+- name: Verify /opt/skrammm/.env exists
+  stat:
+    path: /opt/skrammm/.env
+  register: env_file
+
+- name: Fail if .env is missing
+  fail:
+    msg: |
+      /opt/skrammm/.env not found on the VPS.
+      SSH in as {{ ansible_user }} and create it before running this playbook:
+        mkdir -p /opt/skrammm
+        nano /opt/skrammm/.env
+      Use .env.example from the repo as a template. Include IMAGE=ghcr.io/sysemy-tech/skrammm:latest.
+  when: not env_file.stat.exists
+
 - name: Create systemd service for docker-compose
   copy:
     dest: /etc/systemd/system/skrammm.service
@@ -51,8 +66,36 @@
       WantedBy=multi-user.target
     mode: "0644"
 
-- name: Enable skrammm service
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: true
+
+- name: Pull Docker images
+  become_user: "{{ ansible_user }}"
+  shell: |
+    set -a; source /opt/skrammm/.env; set +a
+    docker compose -f /opt/skrammm/docker-compose.yml pull
+  changed_when: true
+
+- name: Run database migrations
+  become_user: "{{ ansible_user }}"
+  shell: |
+    set -a; source /opt/skrammm/.env; set +a
+    docker compose -f /opt/skrammm/docker-compose.yml run --rm nextjs \
+      node_modules/.bin/prisma migrate deploy
+  changed_when: true
+
+- name: Start and enable skrammm service
   systemd:
     name: skrammm
     enabled: true
-    daemon_reload: true
+    state: started
+
+- name: Wait for Next.js health check
+  uri:
+    url: http://127.0.0.1:3000/api/health
+    status_code: 200
+  register: health
+  retries: 12
+  delay: 10
+  until: health.status == 200

@@ -33,3 +33,25 @@
     groups: docker
     append: true
 
+- name: Create Docker config directory for deploy user
+  file:
+    path: "/home/{{ ansible_user }}/.docker"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"
+
+- name: Configure Docker auth for GHCR (uses CR_PAT env var)
+  copy:
+    dest: "/home/{{ ansible_user }}/.docker/config.json"
+    content: |
+      {
+        "auths": {
+          "ghcr.io": {
+            "auth": "{{ (ansible_user + ':' + lookup('env', 'CR_PAT')) | b64encode }}"
+          }
+        }
+      }
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"

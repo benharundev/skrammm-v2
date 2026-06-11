@@ -1,7 +1,14 @@
 ---
-# Provision a fresh Ubuntu VPS on GCP Compute Engine for Skrammm.
-# Run: ansible-playbook -i inventory.yml site.yml
-# Dry-run: ansible-playbook -i inventory.yml site.yml --check
+# Provision a fresh Ubuntu VPS on Shinjiru KVM for Skrammm.
+#
+# Pre-requisites (run once manually before this playbook):
+#   1. SSH into VPS as root
+#   2. adduser ubuntu && usermod -aG sudo ubuntu
+#   3. ssh-copy-id -i ~/.ssh/skrammm_deploy.pub ubuntu@<VPS_IP>
+#   4. mkdir -p /opt/skrammm && nano /opt/skrammm/.env  (fill all secrets)
+#
+# Run:      VPS_IP=x.x.x.x VPS_USER=ubuntu CR_PAT=ghp_xxx ansible-playbook -i inventory.yml site.yml
+# Dry-run:  ... ansible-playbook -i inventory.yml site.yml --check
 
 - name: Provision Skrammm production server
   hosts: skrammm_prod
@@ -10,8 +17,6 @@
   vars:
     app_dir: /opt/skrammm
     data_dir: /data/postgres
-    gcp_region: asia-southeast1
-    artifact_registry: asia-southeast1-docker.pkg.dev
 
   roles:
     - role: docker
