@@ -28,8 +28,9 @@
     "cache:flush": "docker compose -f docker/docker-compose.local.yml exec redis redis-cli FLUSHDB"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.810.0",
     "@aws-sdk/client-ses": "3.810.0",
-    "@google-cloud/storage": "^7.21.0",
+    "@aws-sdk/s3-request-presigner": "3.810.0",
     "@hookform/resolvers": "^5.4.0",
     "@prisma/client": "6.9.0",
     "@radix-ui/react-avatar": "^1.1.11",

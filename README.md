@@ -273,47 +273,55 @@ Tokens live in `src/styles/theme.css` as CSS custom properties. Tailwind v4 pick
 
 ## Deployment
 
-Production runs on a **GCP Compute Engine Ubuntu VPS** with Docker Compose. Nginx runs natively on the host (not in Docker), managed by Ansible. Cloudflare sits in front for DNS, DDoS, WAF, and SSL termination.
+Production runs on a **Shinjiru KVM VPS (Ubuntu)** with Docker Compose. Nginx runs natively on the host (not in Docker), managed by Ansible. Cloudflare sits in front for DNS, DDoS, WAF, and SSL termination.
 
 ### Stack
 
 | Layer | Technology |
 |---|---|
 | Edge | Cloudflare (DNS, DDoS, WAF, Global SSL/TLS) |
-| Host OS | Ubuntu VPS on GCP Compute Engine |
+| Host OS | Ubuntu VPS (Shinjiru KVM) |
 | Firewall | UFW (ports 22, 80, 443 only) |
 | Reverse proxy | Nginx (native, via `apt`) with Cloudflare Origin cert |
 | App containers | Docker Compose — Next.js + PostgreSQL 16 + Redis 7 |
-| File storage | GCP Cloud Storage + Cloudflare CDN |
-| Email | AWS SES (kept for transactional email) |
-| Container registry | GCP Artifact Registry |
+| File storage | AWS S3 + Cloudflare CDN |
+| Email | AWS SES |
+| Container registry | GitHub Container Registry (GHCR) |
 | IaC | Ansible (`ansible/site.yml`) |
 
 ### Provisioning a new server
 
 ```bash
-# Set target VM
-export GCP_VM_IP=<vm-external-ip>
+# Set target VPS IP
+export GCP_VM_IP=<vps-ip>
 export GCP_VM_USER=ubuntu
 
 # Place Cloudflare Origin cert in docker/certs/ first
 ansible-playbook -i ansible/inventory.yml ansible/site.yml
 ```
 
-The playbook installs Docker, Nginx, UFW, and sets up the systemd service for the app.
+The playbook installs Docker, Nginx, UFW, and sets up the systemd service. After provisioning, create `/opt/skrammm/.env` on the server with all production secrets.
 
 ### CI/CD
 
-Push to `main` → GitHub Actions builds the Docker image → pushes to Artifact Registry → SSHs into the VM, pulls the new image, runs `prisma migrate deploy`, and swaps the container.
+Push to `main` → GitHub Actions builds the Docker image → pushes to GHCR → SSHs into the VPS, pulls the new image, runs `prisma migrate deploy`, and swaps the container.
 
-Required GitHub secrets: `GCP_WIF_PROVIDER`, `GCP_SA_EMAIL`, `GCP_PROJECT_ID`, `GCP_VM_IP`, `GCP_VM_USER`, `GCP_SSH_KEY`, `APP_URL`.
+Required GitHub secrets:
+
+| Secret | Description |
+|---|---|
+| `VPS_IP` | Shinjiru VPS public IP |
+| `VPS_USER` | SSH username (e.g. `ubuntu`) |
+| `VPS_SSH_KEY` | Private SSH key for deploy user |
+| `CR_PAT` | GitHub PAT with `read:packages` scope — lets VPS pull from GHCR |
+| `APP_URL` | Production URL for health check verification |
 
 ### Manual deploy
 
 ```bash
-# On the VM
+# On the VPS
 cd /opt/skrammm
-IMAGE=asia-southeast1-docker.pkg.dev/<project>/skrammm/app:<sha> docker compose up -d nextjs
+IMAGE=ghcr.io/sysemy-tech/skrammm:<sha> docker compose up -d nextjs
 ```
 
 Production database migrations: `pnpm db:migrate:deploy` (run inside the container via `docker compose run --rm nextjs`).

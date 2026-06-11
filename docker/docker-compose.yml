@@ -1,8 +1,8 @@
 version: "3.9"
 
-# Production compose — GCP Compute Engine (Ubuntu VPS)
+# Production compose — Shinjiru KVM VPS (Ubuntu)
 # Nginx runs natively on the host (via Ansible), not as a container.
-# Postgres data lives on a GCP Persistent Disk mounted at /data/postgres.
+# Postgres data lives on a dedicated disk mounted at /data/postgres.
 
 services:
   postgres:
@@ -33,14 +33,13 @@ services:
       REDIS_URL: redis://redis:6379
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
-      # AWS SES — kept on AWS for transactional email
+      # AWS — SES (email) + S3 (file storage)
       AWS_REGION: ${AWS_REGION}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       SES_FROM_ADDRESS: ${SES_FROM_ADDRESS}
-      # GCS — file storage on Google Cloud Storage
-      GCS_BUCKET_ASSETS: ${GCS_BUCKET_ASSETS}
-      GCS_BUCKET_BACKUPS: ${GCS_BUCKET_BACKUPS}
+      S3_BUCKET_ASSETS: ${S3_BUCKET_ASSETS}
+      S3_BUCKET_BACKUPS: ${S3_BUCKET_BACKUPS}
       CLOUDFLARE_CDN_URL: ${CLOUDFLARE_CDN_URL}
       QR_HMAC_SECRET: ${QR_HMAC_SECRET}
       SENTRY_DSN: ${SENTRY_DSN}

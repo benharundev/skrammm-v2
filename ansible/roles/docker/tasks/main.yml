@@ -33,9 +33,3 @@
     groups: docker
     append: true
 
-- name: Install gcloud CLI (for Artifact Registry auth)
-  shell: |
-    curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir=/usr/local
-    ln -sf /usr/local/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud
-  args:
-    creates: /usr/local/bin/gcloud
