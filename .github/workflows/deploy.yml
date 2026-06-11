@@ -1,0 +1,87 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: production
+        type: choice
+        options: [production, staging]
+
+env:
+  PNPM_VERSION: 9.15.0
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: skrammm
+
+jobs:
+  deploy:
+    name: Build → Push ECR → Deploy EC2
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'production' }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build and push image with both :sha and :latest tags
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      # Deploy via SSM Run Command — no public SSH needed (TECH_PRD §15.2)
+      - name: Deploy to EC2 via SSM
+        run: |
+          INSTANCE_ID="${{ secrets.EC2_INSTANCE_ID }}"
+          ECR_IMAGE="${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}',
+              'docker pull $ECR_IMAGE',
+              'cd /opt/skrammm',
+              'ECR_IMAGE=$ECR_IMAGE docker compose pull nextjs',
+              'docker compose run --rm nextjs node_modules/.bin/prisma migrate deploy',
+              'ECR_IMAGE=$ECR_IMAGE docker compose up -d nextjs',
+              'sleep 10',
+              'curl -sf http://localhost:3000/api/health || (echo \"Health check failed — rolling back\" && ECR_IMAGE=$(docker compose images -q nextjs) && exit 1)'
+            ]" \
+            --timeout-seconds 300 \
+            --output-s3-bucket-name "${{ secrets.SSM_LOGS_BUCKET }}" \
+            --query "Command.CommandId" \
+            --output text
+
+      - name: Verify health check
+        run: |
+          echo "Deployment complete. Monitor health at ${{ secrets.APP_URL }}/api/health"

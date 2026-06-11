@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+.next
+.env*
+!.env.example
+*.md
+PRD_Skrammm
+docker/*.local.conf

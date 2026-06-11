@@ -1,0 +1,597 @@
+// Skrammm — Prisma Schema (aligned with TECH_PRD v2.1 §5)
+// PostgreSQL 16 · uuid v7 via application layer (uuid package)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Target architecture: cross-module references should use plain String UUIDs
+// (no @relation). Physical FK constraints should exist only within the same
+// module. This preserves module independence for future service extraction.
+// Cross-module @relations are being removed incrementally (see migration history).
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// MODULE: shared — User, Session, Account, Verification, AuditLog
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @db.Uuid
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions     Session[]
+  accounts     Account[]
+  auditLogs    AuditLog[]
+
+  // team & player relations
+  createdTeams      Team[]          @relation("TeamCreatedBy")
+  staffRoles        TeamStaff[]
+  playerProfiles    Player[]        @relation("PlayerUser")
+
+  // tournament relations
+  organizedTournaments Tournament[]
+
+  // attendance & scoring
+  attendanceScans   AttendanceScan[] @relation("ScannedBy")
+  teamCheckIns      TeamAttendance[] @relation("CheckedInBy")
+  matchEventsLogged MatchEvent[]     @relation("RecordedBy")
+  injuryReports     MatchInjuryReport[] @relation("RecordedBy")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @db.Uuid
+  userId    String   @db.Uuid
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id @db.Uuid
+  userId                String    @db.Uuid
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("accounts")
+}
+
+// OTP code store — Better Auth uses this for email OTP flow
+model Verification {
+  id         String   @id @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("verifications")
+}
+
+model AuditLog {
+  id          String   @id @db.Uuid
+  actorUserId String   @db.Uuid
+  action      String
+  entityType  String
+  entityId    String
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  actor User @relation(fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: team — Team, TeamStaff, TeamMember
+// ---------------------------------------------------------------------------
+
+model Team {
+  id              String   @id @db.Uuid
+  name            String
+  slug            String   @unique
+  logoUrl         String?
+  origin          String?
+  trainingGround  String?
+  contactEmail    String?
+  contactPhone    String?
+  createdByUserId String   @db.Uuid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  createdBy         User                @relation("TeamCreatedBy", fields: [createdByUserId], references: [id])
+  staff             TeamStaff[]
+  players           Player[]
+  members           TeamMember[]
+  tournamentEntries TournamentTeam[]
+  invitations       TournamentInvitation[]
+  homeMatches       Match[]             @relation("HomeTeam")
+  awayMatches       Match[]             @relation("AwayTeam")
+  matchEvents       MatchEvent[]
+  matchLineups      MatchLineup[]
+
+  @@index([createdAt])
+  @@map("teams")
+}
+
+enum StaffRole {
+  manager
+  coach
+  physio
+}
+
+model TeamStaff {
+  id               String    @id @db.Uuid
+  teamId           String    @db.Uuid
+  userId           String    @db.Uuid
+  role             StaffRole @default(manager)
+  isPrimaryManager Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_staff")
+}
+
+enum ClaimStatus {
+  unclaimed
+  claimed
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: player — Player, PlayerQrToken
+// ---------------------------------------------------------------------------
+
+model Player {
+  id               String      @id @db.Uuid
+  userId           String?     @db.Uuid
+  teamId           String      @db.Uuid
+  fullName         String
+  dob              DateTime?   @db.Date
+  jerseyNumber     Int?
+  position         String?
+  photoUrl         String?
+  claimStatus      ClaimStatus @default(unclaimed)
+  playerIdCode     String      @unique
+  claimContact     String?
+  isMinor          Boolean     @default(false)
+  guardianName     String?
+  guardianContact  String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  user               User?                  @relation("PlayerUser", fields: [userId], references: [id])
+  team               Team                   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  qrTokens           PlayerQrToken[]
+  matchEvents        MatchEvent[]
+  matchLineups       MatchLineup[]
+
+  @@index([teamId])
+  @@map("players")
+}
+
+model PlayerQrToken {
+  id            String    @id @db.Uuid
+  playerId      String    @db.Uuid
+  token         String    @unique
+  expiresAt     DateTime
+  rotatedFromId String?   @db.Uuid
+  createdAt     DateTime  @default(now())
+
+  player        Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  rotatedFrom   PlayerQrToken?  @relation("TokenRotation", fields: [rotatedFromId], references: [id])
+  rotatedTo     PlayerQrToken[] @relation("TokenRotation")
+
+  @@index([playerId, expiresAt])
+  @@map("player_qr_tokens")
+}
+
+enum MemberStatus {
+  roster_pending
+  active
+  removed
+}
+
+model TeamMember {
+  id        String       @id @db.Uuid
+  teamId    String       @db.Uuid
+  playerId  String       @db.Uuid
+  status    MemberStatus @default(roster_pending)
+  joinedAt  DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, playerId])
+  @@map("team_members")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: tournament — Tournament, TournamentTeam, TournamentInvitation
+// ---------------------------------------------------------------------------
+
+enum TournamentFormat {
+  festival
+  tiered
+  elimination
+}
+
+enum TournamentStatus {
+  draft
+  paid
+  live
+  completed
+  cancelled
+}
+
+model Tournament {
+  id              String           @id @db.Uuid
+  code            String           @unique
+  name            String
+  slug            String           @unique
+  organizerUserId String           @db.Uuid
+  startsAt        DateTime
+  endsAt          DateTime
+  dailyStartTime  String?
+  dailyEndTime    String?
+  format          TournamentFormat
+  status          TournamentStatus @default(draft)
+  branding        Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  organizer   User                   @relation(fields: [organizerUserId], references: [id])
+  teams       TournamentTeam[]
+  invitations TournamentInvitation[]
+  matches     Match[]
+
+  @@index([status, createdAt])
+  @@map("tournaments")
+}
+
+enum TeamEntryStatus {
+  pending_approval
+  approved
+  rejected
+  withdrawn
+}
+
+model TournamentTeam {
+  id           String          @id @db.Uuid
+  tournamentId String          @db.Uuid
+  teamId       String          @db.Uuid
+  seed         Int?
+  groupLabel   String?
+  status       TeamEntryStatus @default(pending_approval)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  team       Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@unique([tournamentId, teamId])
+  @@map("tournament_teams")
+}
+
+model TournamentInvitation {
+  id           String    @id @db.Uuid
+  tournamentId String    @db.Uuid
+  teamId       String?   @db.Uuid
+  emailSentTo  String
+  claimToken   String    @unique
+  acceptedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  team       Team?      @relation(fields: [teamId], references: [id])
+
+  @@map("tournament_invitations")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: match — Match, MatchOfficial, MatchEvent, MatchLineup
+// ---------------------------------------------------------------------------
+
+enum MatchStatus {
+  scheduled
+  live
+  suspended
+  locked
+  completed
+}
+
+model Match {
+  id           String      @id @db.Uuid
+  tournamentId String      @db.Uuid
+  round        String?
+  groupLabel   String?
+  homeTeamId   String      @db.Uuid
+  awayTeamId   String      @db.Uuid
+  scheduledAt  DateTime
+  pitch        String?
+  status       MatchStatus @default(scheduled)
+  homeScore    Int         @default(0)
+  awayScore    Int         @default(0)
+  lockedAt     DateTime?
+  videoUrl     String?
+  refereeName  String?
+  deletedAt    DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  tournament      Tournament          @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  homeTeam        Team                @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam        Team                @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  officials       MatchOfficial[]
+  events          MatchEvent[]
+  lineups         MatchLineup[]
+
+  @@index([status])
+  @@index([tournamentId, scheduledAt])
+  @@map("matches")
+}
+
+enum OfficialRole {
+  referee
+  assistant
+}
+
+model MatchOfficial {
+  id      String       @id @db.Uuid
+  matchId String       @db.Uuid
+  role    OfficialRole @default(referee)
+  name    String
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@map("match_officials")
+}
+
+enum MatchEventType {
+  try
+  conversion
+  penalty
+  drop_goal
+  yellow_card
+  red_card
+  sub_in
+  sub_out
+}
+
+model MatchEvent {
+  id               String         @id @db.Uuid
+  matchId          String         @db.Uuid
+  teamId           String         @db.Uuid
+  playerId         String?        @db.Uuid
+  eventType        MatchEventType
+  minute           Int?
+  payload          Json?
+  recordedByUserId String         @db.Uuid
+  deletedAt        DateTime?
+  createdAt        DateTime       @default(now())
+
+  match        Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team         Team   @relation(fields: [teamId], references: [id])
+  player       Player? @relation(fields: [playerId], references: [id])
+  recordedBy   User   @relation("RecordedBy", fields: [recordedByUserId], references: [id])
+
+  @@index([matchId, createdAt])
+  @@map("match_events")
+}
+
+model MatchLineup {
+  id           String   @id @db.Uuid
+  matchId      String   @db.Uuid
+  teamId       String   @db.Uuid
+  playerId     String   @db.Uuid
+  isStarter    Boolean  @default(true)
+  jerseyNumber Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team   Team   @relation(fields: [teamId], references: [id])
+  player Player @relation(fields: [playerId], references: [id])
+
+  @@unique([matchId, teamId, playerId])
+  @@map("match_lineups")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: attendance — AttendanceScan, TeamAttendance
+// ---------------------------------------------------------------------------
+
+model AttendanceScan {
+  id                 String   @id @db.Uuid
+  matchId            String   @db.Uuid
+  playerId           String   @db.Uuid
+  teamId             String   @db.Uuid
+  scannedByUserId    String   @db.Uuid
+  scannedAt          DateTime @default(now())
+  scheduledArrivalAt DateTime?
+  minutesLate        Int?
+  qrTokenId          String?  @unique @db.Uuid
+  ip                 String?
+  userAgent          String?
+  isManualOverride   Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  scannedBy User           @relation("ScannedBy", fields: [scannedByUserId], references: [id])
+
+  @@unique([matchId, playerId])
+  @@index([matchId])
+  @@map("attendance_scans")
+}
+
+model TeamAttendance {
+  id               String   @id @db.Uuid
+  tournamentId     String   @db.Uuid
+  matchId          String   @db.Uuid
+  teamId           String   @db.Uuid
+  checkedInByUserId String  @db.Uuid
+  checkedInAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  checkedInBy User       @relation("CheckedInBy", fields: [checkedInByUserId], references: [id])
+
+  @@unique([matchId, teamId])
+  @@map("team_attendance")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: medical — PlayerMedicalProfile, MatchInjuryReport
+// ---------------------------------------------------------------------------
+
+enum FitnessStatus {
+  fit
+  doubtful
+  out
+}
+
+model PlayerMedicalProfile {
+  id                    String        @id @db.Uuid
+  playerId              String        @unique @db.Uuid
+  fitnessStatus         FitnessStatus @default(fit)
+  injuryType            String?
+  bodyPart              String?
+  expectedReturnAt      DateTime?     @db.Date
+  allergies             String?
+  bloodType             String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  note                  String?
+  ownerIsClaimed        Boolean       @default(false)
+  updatedAt             DateTime      @updatedAt
+  createdAt             DateTime      @default(now())
+
+  @@map("player_medical_profiles")
+}
+
+enum InjurySeverity {
+  minor
+  moderate
+  serious
+}
+
+model MatchInjuryReport {
+  id               String         @id @db.Uuid
+  matchId          String         @db.Uuid
+  playerId         String         @db.Uuid
+  injuryType       String
+  bodyPart         String?
+  severity         InjurySeverity @default(minor)
+  actionTaken      String?
+  note             String?
+  recordedByUserId String         @db.Uuid
+  createdAt        DateTime       @default(now())
+
+  recordedBy User   @relation("RecordedBy", fields: [recordedByUserId], references: [id])
+
+  @@map("match_injury_reports")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: reliability — ReliabilitySnapshot
+// ---------------------------------------------------------------------------
+
+model ReliabilitySnapshot {
+  id          String   @id @db.Uuid
+  playerId    String   @db.Uuid
+  score       Int
+  components  Json
+  computedAt  DateTime @default(now())
+
+  @@index([playerId, computedAt])
+  @@map("reliability_snapshots")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: sponsor — Sponsor
+// ---------------------------------------------------------------------------
+
+model Sponsor {
+  id           String    @id @db.Uuid
+  tournamentId String    @db.Uuid
+  name         String
+  logoUrl      String?
+  clickUrl     String?
+  tier         String?
+  startsAt     DateTime?
+  endsAt       DateTime?
+  impressions  Int       @default(0)
+  clicks       Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("sponsors")
+}
+
+// ---------------------------------------------------------------------------
+// MODULE: payment — Payment
+// ---------------------------------------------------------------------------
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+model Payment {
+  id              String        @id @db.Uuid
+  tournamentId    String        @db.Uuid
+  organizerUserId String        @db.Uuid
+  amountCents     Int
+  currency        String        @default("MYR")
+  processor       String
+  processorRef    String
+  status          PaymentStatus @default(pending)
+  paidAt          DateTime?
+  raw             Json?
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([processor, processorRef])
+  @@map("payments")
+}

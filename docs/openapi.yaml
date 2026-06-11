@@ -1,0 +1,812 @@
+openapi: 3.0.3
+
+info:
+  title: Skrammm API
+  version: 1.0.0
+  description: |
+    REST API for the Skrammm rugby tournament management platform.
+
+    Skrammm serves two hosts:
+    - `app.skrammm.com` — organizer, team manager, and player portals (all endpoints here)
+    - `skrammm.com` — marketing / public-facing pages (match share card only)
+
+    ## Authentication
+    All protected endpoints require a session cookie obtained through the email OTP flow:
+    1. `POST /api/auth/send-otp` — sends a 6-digit code via email
+    2. `POST /api/auth/verify-otp` — verifies the code and creates a 30-day rolling session
+
+    The session cookie is `__Secure-skrammm.session_token` in production, `skrammm.session_token` in local dev.
+
+    ## Authorization
+    Authorization is entity-scoped. A user holds permissions against specific entities
+    (tournaments, teams, players) — not globally. Every mutating endpoint checks
+    `can(userId, permission, scope)` before acting.
+
+servers:
+  - url: https://app.skrammm.com
+    description: Production (app)
+  - url: https://skrammm.com
+    description: Production (marketing — match share card only)
+  - url: http://localhost:3000
+    description: Local development
+
+security: []
+
+tags:
+  - name: auth
+    description: Authentication — email OTP flow and session management (Better Auth)
+  - name: health
+    description: Application health check
+  - name: realtime
+    description: Server-Sent Events stream for live match updates
+  - name: organizer
+    description: Match scoring and phase management (organizer portal)
+  - name: team-manager
+    description: Attendance scanning and override (team manager portal)
+  - name: player
+    description: QR token generation and shareable performance cards (player portal)
+  - name: webhooks
+    description: Third-party payment webhook (Billplz)
+  - name: public
+    description: Unauthenticated public endpoints on the marketing host
+
+paths:
+
+  /api/auth/{operation}:
+    get:
+      tags: [auth]
+      summary: Better Auth — GET operations
+      description: |
+        Catch-all Better Auth route handler for read operations.
+        Key sub-route: `GET /api/auth/get-session` returns the current session.
+      parameters:
+        - name: operation
+          in: path
+          required: true
+          schema:
+            type: string
+          example: get-session
+      responses:
+        '200':
+          description: Operation succeeded
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      tags: [auth]
+      summary: Better Auth — POST operations
+      description: |
+        Catch-all Better Auth route handler for write operations.
+        Key sub-routes:
+        - `POST /api/auth/send-otp` — send OTP to email
+        - `POST /api/auth/verify-otp` — verify OTP and create session
+        - `POST /api/auth/sign-out` — invalidate session
+      parameters:
+        - name: operation
+          in: path
+          required: true
+          schema:
+            type: string
+          example: send-otp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Payload varies by operation
+              example:
+                email: user@example.com
+      responses:
+        '200':
+          description: Operation succeeded
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/health:
+    get:
+      tags: [health]
+      summary: Health check
+      description: Returns the health status of the application and database connection.
+      security: []
+      responses:
+        '200':
+          description: Health status (even when degraded, HTTP status is 200)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  value:
+                    status: ok
+                    db: ok
+                    ts: 1718000000000
+                degraded:
+                  value:
+                    status: error
+                    db: unreachable
+                    ts: 1718000000000
+
+  /api/stream/{matchId}:
+    get:
+      tags: [realtime]
+      summary: Live match event stream (SSE)
+      description: |
+        Server-Sent Events stream for a live match. Delivers real-time scoring events,
+        cards, and substitutions.
+
+        If a `Last-Event-ID` header is provided, the server replays all events since
+        that event ID before resuming the live stream (catch-up replay).
+
+        Events are sent with UUID v7 IDs, enabling time-ordered replay.
+
+        **Infrastructure note:** Nginx requires `proxy_buffering off` for this route.
+        Cloudflare must not cache it (set a Cache Rule to bypass).
+      security: []
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+          description: The match to stream
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            $ref: '#/components/schemas/UUID'
+          description: UUID of the last received event — triggers catch-up replay
+      responses:
+        '200':
+          description: SSE stream
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum: [text/event-stream]
+            Cache-Control:
+              schema:
+                type: string
+                enum: ['no-cache, no-store, no-transform']
+            X-Accel-Buffering:
+              schema:
+                type: string
+                enum: ['no']
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                id: 01900000-0000-7000-0000-000000000001
+                event: match_state
+                data: {"homeScore":5,"awayScore":0,"status":"live","events":[]}
+
+                id: 01900000-0000-7000-0000-000000000002
+                event: match_event
+                data: {"eventType":"try","teamId":"...","minute":12,"player":{"fullName":"Ahmad Razif"}}
+
+                : heartbeat
+        '404':
+          description: Match not found
+
+  /api/organizer/match/{matchId}/event:
+    post:
+      tags: [organizer]
+      summary: Add match event
+      description: |
+        Add a scoring or disciplinary event to a live match.
+        Requires `tournament:score` permission for the match's tournament.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMatchEventRequest'
+            example:
+              teamId: 01900000-0000-7000-0000-000000000001
+              eventType: try
+              minute: 12
+              playerId: 01900000-0000-7000-0000-000000000002
+      responses:
+        '200':
+          description: Event added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddMatchEventResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [organizer]
+      summary: Delete match event
+      description: |
+        Remove a previously added match event (undo).
+        Requires `tournament:score` permission for the match's tournament.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteMatchEventRequest'
+      responses:
+        '200':
+          description: Event deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/organizer/match/{matchId}/phase:
+    post:
+      tags: [organizer]
+      summary: Transition match phase
+      description: |
+        Move a match to a new lifecycle phase (scheduled → live → suspended → locked → completed).
+        Requires `tournament:score` permission for the match's tournament.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchPhaseRequest'
+            example:
+              status: live
+      responses:
+        '200':
+          description: Phase transitioned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tm/attendance/scan:
+    post:
+      tags: [team-manager]
+      summary: Scan player QR for attendance
+      description: |
+        Record a player's match attendance by scanning their QR token.
+        Requires `team:scan` permission — the user must be staff of the team,
+        and the match must be scheduled for today.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceScanRequest'
+      responses:
+        '200':
+          description: Player checked in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceScanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/tm/attendance/override:
+    post:
+      tags: [team-manager]
+      summary: Manual attendance override
+      description: |
+        Manually mark a player as attended without a QR scan.
+        Requires `team:scan` permission — same constraints as the scan endpoint.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceOverrideRequest'
+      responses:
+        '200':
+          description: Attendance recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /player/qr/token:
+    get:
+      tags: [player]
+      summary: Generate player QR token
+      description: |
+        Generate a time-limited QR token for the authenticated player.
+        The token is used by team managers when scanning attendance.
+        Requires the user to have a claimed player profile.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: QR token payload
+          content:
+            application/json:
+              schema:
+                type: object
+                description: QR token payload (opaque to consumers)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No claimed player profile found for this user
+
+  /player/share/card:
+    get:
+      tags: [player]
+      summary: Generate performance card image
+      description: |
+        Generate a shareable player performance card as a PNG image.
+        Stats window is controlled by the `type` query parameter.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [career, last30, matches]
+            default: career
+          description: Stats window for the card
+      responses:
+        '200':
+          description: PNG image
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum: [image/png]
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No player profile found
+
+  /player/share/tournament/{tournamentId}:
+    get:
+      tags: [player]
+      summary: Generate tournament performance card image
+      description: |
+        Generate a shareable player performance card for a specific tournament as a PNG image.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: tournamentId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+          description: Tournament to generate stats for
+      responses:
+        '200':
+          description: PNG image
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum: [image/png]
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No player profile or tournament not found
+
+  /api/webhooks/billplz:
+    post:
+      tags: [webhooks]
+      summary: Billplz payment webhook
+      description: |
+        Receives payment event notifications from the Billplz payment gateway.
+        Authenticated via HMAC-SHA256 signature in the `X-Signature` header.
+
+        **Note:** The payments feature is currently dormant and gated behind the
+        `PAYMENTS_ENABLED` environment variable. All tournaments are currently free.
+      security: []
+      parameters:
+        - name: X-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: HMAC-SHA256 signature of the request payload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillplzWebhook'
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid or missing signature
+
+  /{tournamentCode}/share/{matchId}:
+    get:
+      tags: [public]
+      summary: Match story card image
+      description: |
+        Generate a shareable match story card as a PNG image for social sharing.
+
+        **Host:** `skrammm.com` (marketing host, not `app.skrammm.com`)
+
+        Draft tournaments return 404. Completed match cards are cached for 1 hour.
+      security: []
+      servers:
+        - url: https://skrammm.com
+          description: Marketing host
+      parameters:
+        - name: tournamentCode
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Tournament short code (e.g. `rughero-2026`)
+          example: rughero-2026
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+          description: Match to generate the card for
+      responses:
+        '200':
+          description: PNG image
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum: [image/png]
+            Cache-Control:
+              schema:
+                type: string
+                example: 'public, max-age=3600, stale-while-revalidate=86400'
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Tournament not found, tournament is in draft, or match not found
+
+components:
+
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Secure-skrammm.session_token
+      description: |
+        Session cookie set after successful OTP verification.
+        Cookie name in local dev: `skrammm.session_token` (no `__Secure-` prefix).
+
+  schemas:
+
+    UUID:
+      type: string
+      format: uuid
+      description: UUID v7
+      example: 01900000-0000-7000-0000-000000000001
+
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error description
+
+    HealthResponse:
+      type: object
+      required: [status, db, ts]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        db:
+          type: string
+          enum: [ok, unreachable]
+        ts:
+          type: integer
+          description: Unix timestamp in milliseconds
+
+    MatchEventType:
+      type: string
+      enum:
+        - try
+        - conversion
+        - penalty
+        - drop_goal
+        - yellow_card
+        - red_card
+        - sub_in
+        - sub_out
+      description: |
+        Scoring events: try (5 pts), conversion (2 pts), penalty (3 pts), drop_goal (3 pts).
+        Non-scoring events: yellow_card, red_card, sub_in, sub_out.
+
+    MatchStatus:
+      type: string
+      enum:
+        - scheduled
+        - live
+        - suspended
+        - locked
+        - completed
+      description: |
+        - scheduled: Not yet started
+        - live: Clock running
+        - suspended: Temporarily halted
+        - locked: Final score confirmed, awaiting review
+        - completed: Fully closed
+
+    TournamentFormat:
+      type: string
+      enum:
+        - festival
+        - tiered
+        - elimination
+
+    TournamentStatus:
+      type: string
+      enum:
+        - draft
+        - paid
+        - live
+        - completed
+        - cancelled
+
+    AddMatchEventRequest:
+      type: object
+      required: [teamId, eventType]
+      properties:
+        teamId:
+          $ref: '#/components/schemas/UUID'
+          description: Team that scored or committed the event
+        eventType:
+          $ref: '#/components/schemas/MatchEventType'
+        minute:
+          type: integer
+          minimum: 0
+          maximum: 120
+          description: Match minute
+        playerId:
+          $ref: '#/components/schemas/UUID'
+          description: Player involved (optional)
+
+    AddMatchEventResponse:
+      type: object
+      required: [ok, eventId]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        eventId:
+          $ref: '#/components/schemas/UUID'
+
+    DeleteMatchEventRequest:
+      type: object
+      required: [eventId]
+      properties:
+        eventId:
+          $ref: '#/components/schemas/UUID'
+          description: ID of the event to delete
+
+    MatchPhaseRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/MatchStatus'
+
+    AttendanceScanRequest:
+      type: object
+      required: [token, matchId, teamId]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          description: QR token from the player's GET /player/qr/token
+        matchId:
+          $ref: '#/components/schemas/UUID'
+          description: Match being attended
+        teamId:
+          $ref: '#/components/schemas/UUID'
+          description: Team the player is being checked in for
+
+    AttendanceScanResponse:
+      type: object
+      required: [playerName]
+      properties:
+        playerName:
+          type: string
+          example: Ahmad Razif bin Azman
+
+    AttendanceOverrideRequest:
+      type: object
+      required: [playerId, matchId, teamId]
+      properties:
+        playerId:
+          $ref: '#/components/schemas/UUID'
+        matchId:
+          $ref: '#/components/schemas/UUID'
+        teamId:
+          $ref: '#/components/schemas/UUID'
+
+    BillplzWebhook:
+      type: object
+      required:
+        - id
+        - collection_id
+        - paid
+        - state
+        - amount
+        - paid_amount
+        - due_at
+        - email
+        - name
+        - url
+      properties:
+        id:
+          type: string
+          description: Billplz bill ID
+        collection_id:
+          type: string
+        paid:
+          type: boolean
+        state:
+          type: string
+        amount:
+          type: integer
+          description: Total amount in cents
+        paid_amount:
+          type: integer
+          description: Amount paid in cents
+        due_at:
+          type: string
+          format: date
+        email:
+          type: string
+          format: email
+        mobile:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: Billplz bill URL
+        paid_at:
+          type: string
+          format: date-time
+        transaction_id:
+          type: string
+        transaction_status:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request body or parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Invalid input
+
+    Unauthorized:
+      description: No valid session — authenticate first via /api/auth/verify-otp
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Unauthorized
+
+    Forbidden:
+      description: Authenticated but lacking the required entity-scoped permission
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Forbidden
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: Not found

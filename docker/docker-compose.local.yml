@@ -1,0 +1,59 @@
+version: "3.9"
+
+# Local development override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.local.yml up
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"  # Expose locally for prisma studio / direct tooling
+    volumes:
+      - postgres_local:/var/lib/postgresql/data  # Named volume for local dev
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      POSTGRES_PASSWORD: localpassword
+
+  nextjs:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm install && pnpm dev"
+    volumes:
+      - ..:/app          # Mount entire repo for hot reload
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://skram:localpassword@postgres:5432/skram
+      REDIS_URL: redis://redis:6379
+      BETTER_AUTH_SECRET: local-dev-secret-change-me
+      BETTER_AUTH_URL: http://app.localhost.skrammm.com:3000
+      AWS_REGION: ap-southeast-1
+      # In local dev, SES calls will fail unless you set real credentials
+      # Use a verified SES sandbox address or mock the email lib
+      QR_HMAC_SECRET: local-qr-secret-change-me
+      PAYMENTS_ENABLED: "false"
+
+  nginx:
+    volumes:
+      - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      # No 443 in local dev — no TLS cert needed
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_local:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_local:
+  redis_local:
