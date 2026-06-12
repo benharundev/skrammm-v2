@@ -15,7 +15,7 @@ import { NextResponse } from "next/server";
 // ---------------------------------------------------------------------------
 
 const PUBLIC_PATHS = new Set(["/", "/login", "/signup", "/login/organizer"]);
-const PUBLIC_PREFIXES = ["/api/auth/", "/api/org-auth/", "/_next/", "/favicon.ico", "/.well-known/"];
+const PUBLIC_PREFIXES = ["/api/auth/", "/api/org-auth/", "/api/dev/", "/_next/", "/favicon.ico", "/.well-known/"];
 
 const APP_PREFIXES = [
   "/organizer",
