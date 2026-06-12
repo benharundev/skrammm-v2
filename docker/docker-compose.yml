@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Production compose — Shinjiru KVM VPS (Ubuntu)
 # Nginx runs natively on the host (via Ansible), not as a container.
 # Postgres data lives on a dedicated disk mounted at /data/postgres.

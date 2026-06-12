@@ -77,6 +77,11 @@
   systemd:
     daemon_reload: true
 
+- name: Log in to GitHub Container Registry
+  become_user: "{{ ansible_user }}"
+  shell: echo "{{ cr_pat }}" | docker login ghcr.io -u sysemy-tech --password-stdin
+  no_log: true
+
 - name: Pull Docker images
   become_user: "{{ ansible_user }}"
   shell: docker compose pull
