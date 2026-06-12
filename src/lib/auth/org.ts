@@ -7,6 +7,7 @@ import { v7 as uuidv7 } from "uuid";
 
 // Mirror of appAuth (src/lib/auth/index.ts) — keep session, generateId, crossSubDomain, and cookie config in sync
 export const orgAuth = betterAuth({
+  baseURL: process.env.BETTER_AUTH_URL,
   database: prismaAdapter(db, {
     provider: "postgresql",
   }),
