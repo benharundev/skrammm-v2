@@ -22,11 +22,14 @@ RUN pnpm db:generate && \
       [ -n "$PRISMA_DIR" ] && cp -rL "$PRISMA_DIR" /app/node_modules/.prisma \
         || (echo "ERROR: .prisma not found in pnpm store after generate" && exit 1); \
     fi && \
-    if [ ! -d "/app/node_modules/@prisma/engines" ]; then \
-      ENGINES_DIR=$(find /app/node_modules/.pnpm -name "engines" -type d 2>/dev/null | grep "@prisma/engines$" | head -1); \
-      [ -n "$ENGINES_DIR" ] && (mkdir -p /app/node_modules/@prisma && cp -rL "$ENGINES_DIR" /app/node_modules/@prisma/engines) \
-        || (echo "ERROR: @prisma/engines not found in pnpm store" && exit 1); \
-    fi
+    mkdir -p /app/node_modules/@prisma && \
+    find /app/node_modules/.pnpm -mindepth 4 -maxdepth 4 -type d \
+         -path "*/node_modules/@prisma/*" 2>/dev/null | \
+    while IFS= read -r pkg_dir; do \
+      pkg_name=$(basename "$pkg_dir"); \
+      target="/app/node_modules/@prisma/$pkg_name"; \
+      [ ! -d "$target" ] && cp -rL "$pkg_dir" "$target" 2>/dev/null || true; \
+    done
 ENV NEXT_TELEMETRY_DISABLED=1
 # NEXT_PUBLIC_* vars are inlined at build time — must be passed as build args
 ARG NEXT_PUBLIC_APP_URL
