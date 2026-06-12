@@ -39,6 +39,7 @@ export async function loginAsPlayer(
   await page.goto("/login");
   await page.getByRole("textbox", { name: /email/i }).fill(email);
   await page.getByRole("button", { name: /send sign-in code/i }).click();
+  await page.getByRole("textbox", { name: /code/i }).waitFor();
   const otp = await getOtp(page, email);
   await page.getByRole("textbox", { name: /code/i }).fill(otp);
   await page.getByRole("button", { name: /verify code/i }).click();
@@ -52,6 +53,7 @@ export async function loginAsOrganizer(
   await page.goto("/login/organizer");
   await page.getByRole("textbox", { name: /email/i }).fill(email);
   await page.getByRole("button", { name: /send sign-in code/i }).click();
+  await page.getByRole("textbox", { name: /code/i }).waitFor();
   const otp = await getOtp(page, email);
   await page.getByRole("textbox", { name: /code/i }).fill(otp);
   await page.getByRole("button", { name: /verify code/i }).click();
