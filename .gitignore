@@ -20,6 +20,9 @@ dist/
 deploy_key
 deploy_key.pub
 
+# Playwright auth state
+src/tests/e2e/.auth/
+
 # Prisma
 prisma/migrations/*.lock
 

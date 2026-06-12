@@ -148,7 +148,7 @@ test.describe("Spectator — Public Page", () => {
     });
 
     await page.goto(`/${LIVE_TOURNAMENT_CODE}`);
-    await page.waitForTimeout(2000); // allow network activity to settle
+    await page.waitForLoadState("networkidle");
 
     // TODO: uncomment once real data is wired
     // expect(piiFound).toHaveLength(0);

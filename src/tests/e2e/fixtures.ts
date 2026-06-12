@@ -1,4 +1,7 @@
 import { test as base, type Page } from "@playwright/test";
+import path from "path";
+
+const AUTH_DIR = path.join(__dirname, ".auth");
 
 // ---------------------------------------------------------------------------
 // Test accounts (must be provisioned in the test DB before running e2e tests)
@@ -12,8 +15,6 @@ export const TEST_ACCOUNTS = {
 
 // ---------------------------------------------------------------------------
 // OTP helper
-// Retrieves the most recent OTP for a given email from the dev endpoint.
-// In CI, set TEST_OTP_OVERRIDE env var to use a fixed code.
 // ---------------------------------------------------------------------------
 export async function getOtp(page: Page, email: string): Promise<string> {
   if (process.env["TEST_OTP_OVERRIDE"]) {
@@ -29,9 +30,12 @@ export async function getOtp(page: Page, email: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// login helper — drives the email-OTP auth flow for player/manager portal
+// Login helpers — called by global.setup.ts once per run, not per test
 // ---------------------------------------------------------------------------
-export async function loginAsPlayer(page: Page, email: string = TEST_ACCOUNTS.player) {
+export async function loginAsPlayer(
+  page: Page,
+  email: string = TEST_ACCOUNTS.player
+) {
   await page.goto("/login");
   await page.getByRole("textbox", { name: /email/i }).fill(email);
   await page.getByRole("button", { name: /send code/i }).click();
@@ -41,9 +45,6 @@ export async function loginAsPlayer(page: Page, email: string = TEST_ACCOUNTS.pl
   await page.waitForURL("**/player**");
 }
 
-// ---------------------------------------------------------------------------
-// login helper — drives the email-OTP auth flow for the organizer portal
-// ---------------------------------------------------------------------------
 export async function loginAsOrganizer(
   page: Page,
   email: string = TEST_ACCOUNTS.organizer
@@ -58,27 +59,38 @@ export async function loginAsOrganizer(
 }
 
 // ---------------------------------------------------------------------------
-// Extended test fixture with pre-authenticated contexts
+// Fixtures — load pre-authenticated storage state from global.setup.ts
 // ---------------------------------------------------------------------------
 type Fixtures = {
   playerPage: Page;
   organizerPage: Page;
+  managerPage: Page;
 };
 
 export const test = base.extend<Fixtures>({
   playerPage: async ({ browser }, use) => {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await loginAsPlayer(page);
+    const ctx = await browser.newContext({
+      storageState: path.join(AUTH_DIR, "player.json"),
+    });
+    const page = await ctx.newPage();
     await use(page);
-    await context.close();
+    await ctx.close();
   },
   organizerPage: async ({ browser }, use) => {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await loginAsOrganizer(page);
+    const ctx = await browser.newContext({
+      storageState: path.join(AUTH_DIR, "organizer.json"),
+    });
+    const page = await ctx.newPage();
     await use(page);
-    await context.close();
+    await ctx.close();
+  },
+  managerPage: async ({ browser }, use) => {
+    const ctx = await browser.newContext({
+      storageState: path.join(AUTH_DIR, "manager.json"),
+    });
+    const page = await ctx.newPage();
+    await use(page);
+    await ctx.close();
   },
 });
 
