@@ -32,21 +32,26 @@ This code expires in 10 minutes. Do not share it with anyone.
     return;
   }
 
-  await sendEmail({
-    Source: FROM_ADDRESS,
-    Destination: { ToAddresses: [email] },
-    Message: {
-      Subject: { Data: `${otp} — your Skrammm sign-in code` },
-      Body: {
-        Text: {
-          Data: `Your Skrammm sign-in code is: ${otp}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
-        },
-        Html: {
-          Data: `<p>Your Skrammm sign-in code is: <strong>${otp}</strong></p><p>This code expires in 10 minutes. Do not share it with anyone.</p>`,
+  try {
+    await sendEmail({
+      Source: FROM_ADDRESS,
+      Destination: { ToAddresses: [email] },
+      Message: {
+        Subject: { Data: `${otp} — your Skrammm sign-in code` },
+        Body: {
+          Text: {
+            Data: `Your Skrammm sign-in code is: ${otp}\n\nThis code expires in 10 minutes. Do not share it with anyone.`,
+          },
+          Html: {
+            Data: `<p>Your Skrammm sign-in code is: <strong>${otp}</strong></p><p>This code expires in 10 minutes. Do not share it with anyone.</p>`,
+          },
         },
       },
-    },
-  });
+    });
+  } catch (err) {
+    // SES sandbox mode — OTP is stored in DB; admin can relay it manually
+    console.error(`[SES] Failed to send OTP to ${email}:`, err);
+  }
 }
 
 // ---------------------------------------------------------------------------
