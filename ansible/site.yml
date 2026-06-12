@@ -18,6 +18,8 @@
   vars:
     app_dir: /opt/skrammm
     data_dir: /data/postgres
+    cr_pat: "{{ lookup('env', 'CR_PAT') }}"
+    cr_username: "adbals"
 
   roles:
     - role: docker

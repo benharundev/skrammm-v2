@@ -77,6 +77,12 @@
   systemd:
     daemon_reload: true
 
+- name: Assert cr_pat is not empty
+  assert:
+    that:
+      - cr_pat | length > 0
+    fail_msg: "cr_pat is empty. Export CR_PAT before running: export CR_PAT=ghp_xxx"
+
 - name: Log in to GitHub Container Registry
   become_user: "{{ ansible_user }}"
   shell: echo "{{ cr_pat }}" | docker login ghcr.io -u {{ cr_username }} --password-stdin
