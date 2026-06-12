@@ -63,7 +63,7 @@ jobs:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USER }}
           port: ${{ secrets.VPS_SSH_PORT }}
-          password: ${{ secrets.VPS_SSH_PASSWORD }}
+          key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
