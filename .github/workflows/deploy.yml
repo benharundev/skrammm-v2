@@ -96,10 +96,15 @@ jobs:
             # Migrations run automatically inside the container CMD before server starts
             IMAGE="$IMAGE" docker compose up -d --no-deps nextjs
 
-            # Wait up to 2 minutes for health (12 × 10s)
-            for i in $(seq 1 12); do
+            # Wait up to 3 minutes for health (18 × 10s)
+            for i in $(seq 1 18); do
               curl -sf http://localhost:3000/api/health && break
-              [ "$i" -eq 12 ] && echo "Health check failed after 120s" && exit 1
+              if [ "$i" -eq 18 ]; then
+                echo "=== Health check failed after 180s — container logs ==="
+                docker logs skrammm-nextjs-1 --tail 100
+                echo "=== end logs ==="
+                exit 1
+              fi
               sleep 10
             done
 
