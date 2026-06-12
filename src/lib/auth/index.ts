@@ -6,7 +6,7 @@ import { sendOTP } from "@lib/email";
 import { v7 as uuidv7 } from "uuid";
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL: process.env.BETTER_AUTH_URL!,
   database: prismaAdapter(db, {
     provider: "postgresql",
   }),
