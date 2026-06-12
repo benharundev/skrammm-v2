@@ -55,18 +55,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Step 2: Lint (module boundary rules)
-      - name: Lint
-        run: pnpm lint
-
-      # Step 3: Typecheck
-      - name: Typecheck
-        run: pnpm typecheck
-
-      # Step 4: Prisma generate + migrate on ephemeral Postgres
+      # Step 2: Generate Prisma client (must run before lint + typecheck)
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      # Step 3: Lint (module boundary rules)
+      - name: Lint
+        run: pnpm lint
+
+      # Step 4: Typecheck
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Step 5: Migrate on ephemeral Postgres
       - name: Run migrations (dry-run validation)
         run: pnpm db:migrate:deploy
 
