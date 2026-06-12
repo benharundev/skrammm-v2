@@ -92,6 +92,20 @@ jobs:
             sed -i "s|^IMAGE=.*|IMAGE=$IMAGE|" .env
             grep -q "^IMAGE=" .env || echo "IMAGE=$IMAGE" >> .env
 
+            # Ensure postgres data-dir is owned by UID 70 (postgres:16-alpine)
+            sudo chown -R 70:70 /data/postgres 2>/dev/null || true
+
+            # If postgres is unhealthy, restart it and wait up to 60s
+            if ! docker inspect --format '{{.State.Health.Status}}' skrammm-postgres-1 2>/dev/null | grep -q "^healthy$"; then
+              echo "Postgres not healthy — restarting..."
+              docker compose restart postgres
+              for i in $(seq 1 12); do
+                docker inspect --format '{{.State.Health.Status}}' skrammm-postgres-1 2>/dev/null | grep -q "^healthy$" && break
+                [ "$i" -eq 12 ] && echo "Postgres failed to become healthy" && exit 1
+                sleep 5
+              done
+            fi
+
             # Recreate only the nextjs container — postgres and redis stay running
             # Migrations run automatically inside the container CMD before server starts
             IMAGE="$IMAGE" docker compose up -d --no-deps nextjs

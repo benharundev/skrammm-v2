@@ -11,8 +11,8 @@
   file:
     path: /data/postgres
     state: directory
-    owner: "999"  # postgres UID inside the container
-    group: "999"
+    owner: "70"   # postgres UID in postgres:16-alpine
+    group: "70"
     mode: "0700"
 
 - name: Copy docker-compose.yml
@@ -79,7 +79,7 @@
 
 - name: Log in to GitHub Container Registry
   become_user: "{{ ansible_user }}"
-  shell: echo "{{ cr_pat }}" | docker login ghcr.io -u sysemy-tech --password-stdin
+  shell: echo "{{ cr_pat }}" | docker login ghcr.io -u {{ cr_username }} --password-stdin
   no_log: true
 
 - name: Pull Docker images
