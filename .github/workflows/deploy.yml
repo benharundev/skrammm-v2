@@ -57,13 +57,27 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
 
+      - name: Check secrets are present
+        run: |
+          if [ -z "$VPS_IP" ]; then echo "ERROR: VPS_IP secret is empty"; exit 1; fi
+          if [ -z "$VPS_USER" ]; then echo "ERROR: VPS_USER secret is empty"; exit 1; fi
+          if [ -z "$VPS_SSH_PORT" ]; then echo "ERROR: VPS_SSH_PORT secret is empty"; exit 1; fi
+          if [ -z "$DEPLOY_KEY" ]; then echo "ERROR: deploy_key secret is empty"; exit 1; fi
+          echo "All secrets present. Key starts with: ${DEPLOY_KEY:0:30}"
+        env:
+          VPS_IP: ${{ secrets.VPS_IP }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
+          DEPLOY_KEY: ${{ secrets.deploy_key }}
+
       - name: Deploy to Shinjiru VPS via SSH
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USER }}
           port: ${{ secrets.VPS_SSH_PORT }}
           key: ${{ secrets.deploy_key }}
+          debug: true
           script: |
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
 

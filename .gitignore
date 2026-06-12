@@ -16,6 +16,10 @@ dist/
 .env.test.local
 .env.production.local
 
+# SSH deploy keys — NEVER commit
+deploy_key
+deploy_key.pub
+
 # Prisma
 prisma/migrations/*.lock
 
