@@ -4,9 +4,9 @@ import { test as base, type Page } from "@playwright/test";
 // Test accounts (must be provisioned in the test DB before running e2e tests)
 // ---------------------------------------------------------------------------
 export const TEST_ACCOUNTS = {
-  player: "test-player@skrammm.local",
-  manager: "test-manager@skrammm.local",
-  organizer: "test-organizer@skrammm.local",
+  player: "player@skrammm.dev",
+  manager: "tm@skrammm.dev",
+  organizer: "organizer@skrammm.dev",
   newUser: "test-new@skrammm.local",
 } as const;
 

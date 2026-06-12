@@ -33,7 +33,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://skram:testpassword@localhost:5432/skram_test
       BETTER_AUTH_SECRET: ci-test-secret
-      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_URL: http://app.localhost.skrammm.com:3000
+      NEXT_PUBLIC_APP_URL: http://app.localhost.skrammm.com:3000
       AWS_REGION: ap-southeast-1
       QR_HMAC_SECRET: ci-test-qr-secret
       PAYMENTS_ENABLED: "false"
@@ -69,7 +70,10 @@ jobs:
       - name: Run migrations (dry-run validation)
         run: pnpm db:migrate:deploy
 
-      # Step 5: Unit tests
+      # Step 5: Seed test data then run unit tests
+      - name: Seed database
+        run: pnpm db:seed
+
       - name: Unit tests
         run: pnpm test:unit
 
@@ -80,6 +84,10 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
 
       # Step 7: E2E tests (critical paths only — on main branch)
+      - name: Add test hostname to /etc/hosts
+        if: github.ref == 'refs/heads/main'
+        run: echo "127.0.0.1 app.localhost.skrammm.com" | sudo tee -a /etc/hosts
+
       - name: Install Playwright
         if: github.ref == 'refs/heads/main'
         run: pnpm exec playwright install --with-deps chromium
