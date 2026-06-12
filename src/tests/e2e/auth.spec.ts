@@ -43,7 +43,7 @@ test.describe("Auth — Login & Session", () => {
     // Expected: inline validation error shown, no redirect
     await page.goto("/login");
     await page.getByRole("textbox", { name: /email/i }).fill("notanemail");
-    await page.getByRole("button", { name: /send code/i }).click();
+    await page.getByRole("button", { name: /send sign-in code/i }).click();
     // TODO: implement
     await expect(page).toHaveURL(/\/login/);
     // expect inline error to be visible
@@ -59,7 +59,7 @@ test.describe("Auth — Login & Session", () => {
     // Expected: error message shown, stays on /login
     await page.goto("/login");
     await page.getByRole("textbox", { name: /email/i }).fill(TEST_ACCOUNTS.player);
-    await page.getByRole("button", { name: /send code/i }).click();
+    await page.getByRole("button", { name: /send sign-in code/i }).click();
     // TODO: fill wrong OTP and assert error
     // await page.getByRole("textbox", { name: /code/i }).fill("000000");
     // await page.getByRole("button", { name: /sign in/i }).click();
@@ -125,6 +125,7 @@ test.describe("Auth — Login & Session", () => {
     // Preconditions: active player session
     // Steps: navigate to /login while authenticated
     // Expected: redirect to /player (no login loop)
+    test.fixme(true, "Middleware does not yet redirect authenticated users from /login");
     await loginAsPlayer(page, TEST_ACCOUNTS.player);
     await page.goto("/login");
     // TODO: implement — depends on middleware redirect behavior

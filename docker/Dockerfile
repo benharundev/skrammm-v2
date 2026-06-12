@@ -23,12 +23,19 @@ RUN pnpm db:generate && \
         || (echo "ERROR: .prisma not found in pnpm store after generate" && exit 1); \
     fi && \
     mkdir -p /app/node_modules/@prisma && \
-    find /app/node_modules/.pnpm -mindepth 4 -maxdepth 4 -type d \
-         -path "*/node_modules/@prisma/*" 2>/dev/null | \
-    while IFS= read -r pkg_dir; do \
-      pkg_name=$(basename "$pkg_dir"); \
-      target="/app/node_modules/@prisma/$pkg_name"; \
-      [ ! -d "$target" ] && cp -rL "$pkg_dir" "$target" 2>/dev/null || true; \
+    for store_entry in /app/node_modules/.pnpm/@prisma+*/; do \
+      nm_dir="${store_entry}node_modules"; \
+      [ ! -d "$nm_dir" ] && continue; \
+      for pkg in "$nm_dir/@prisma"/*/; do \
+        [ ! -d "$pkg" ] && continue; \
+        n=$(basename "$pkg"); \
+        [ ! -d "/app/node_modules/@prisma/$n" ] && cp -rL "$pkg" "/app/node_modules/@prisma/$n" 2>/dev/null || true; \
+      done; \
+      for sibling in "$nm_dir"/*/; do \
+        n=$(basename "$sibling"); \
+        [ "$n" = "@prisma" ] && continue; \
+        [ ! -d "/app/node_modules/$n" ] && cp -rL "$sibling" "/app/node_modules/$n" 2>/dev/null || true; \
+      done; \
     done
 ENV NEXT_TELEMETRY_DISABLED=1
 # NEXT_PUBLIC_* vars are inlined at build time — must be passed as build args
@@ -49,11 +56,11 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-# Prisma client binaries
+# Prisma client binaries + CLI deps
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
-# Prisma CLI (needed for migrate deploy in CMD)
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/jiti ./node_modules/jiti
 # Prisma schema for migrate deploy
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 

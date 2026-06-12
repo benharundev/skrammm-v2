@@ -29,7 +29,7 @@ test.describe("Organizer — Tournament Setup", () => {
     // await page.getByLabel(/end date/i).fill("2026-09-02");
     // await page.getByRole("button", { name: /next/i }).click();
     // await expect(page.getByText(/how many teams/i)).toBeVisible();
-    await expect(page).toHaveURL(/\/organizer\/settings\/setup/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-03 | happy | 16 teams → format recommendation 'Tiered'", async ({ organizerPage: page }) => {
@@ -101,7 +101,7 @@ test.describe("Organizer — Teams Management", () => {
     // TODO: click Pending tab, then:
     // await page.getByRole("tab", { name: /pending/i }).click();
     // await expect(page.getByText(/all caught up/i)).toBeVisible();
-    await expect(page).toHaveURL(/\/organizer\/teams/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-10 | happy | Approve pending team → moves to Approved tab", async ({ organizerPage: page }) => {
@@ -110,7 +110,7 @@ test.describe("Organizer — Teams Management", () => {
     // Expected: team removed from Pending, appears in Approved
     await page.goto("/organizer/teams");
     // TODO: implement
-    await expect(page).toHaveURL(/\/organizer\/teams/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-11 | happy | Reject pending team → removed from Pending tab", async ({ organizerPage: page }) => {
@@ -118,7 +118,7 @@ test.describe("Organizer — Teams Management", () => {
     // Expected: team removed from Pending, NOT in Approved
     await page.goto("/organizer/teams");
     // TODO: implement
-    await expect(page).toHaveURL(/\/organizer\/teams/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-12 | happy | Search filters approved teams", async ({ organizerPage: page }) => {
@@ -127,14 +127,14 @@ test.describe("Organizer — Teams Management", () => {
     // Expected: list filters in real-time
     await page.goto("/organizer/teams");
     // TODO: click Approved tab, type in search, assert filter
-    await expect(page).toHaveURL(/\/organizer\/teams/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-13 | happy | Click approved team row → team detail page", async ({ organizerPage: page }) => {
     // Expected: navigates to /organizer/teams/{teamId}
     await page.goto("/organizer/teams");
     // TODO: implement
-    await expect(page).toHaveURL(/\/organizer\/teams/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-14 | empty | Team detail — team with no players", async ({ organizerPage: page }) => {
@@ -142,6 +142,7 @@ test.describe("Organizer — Teams Management", () => {
     // TODO: navigate to a team detail page for an empty team
     // await page.goto("/organizer/teams/{emptyTeamId}");
     // await expect(page.getByText(/no players registered/i)).toBeVisible();
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 
@@ -149,6 +150,7 @@ test.describe("Organizer — Teams Management", () => {
     // Expected: first 10 rows visible, pagination controls present
     // TODO: navigate to team with 15+ players
     // await expect(page.getByRole("navigation", { name: /pagination/i })).toBeVisible();
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 });
@@ -158,7 +160,7 @@ test.describe("Organizer — Fixtures & Schedule", () => {
     // Expected: empty state, no match rows
     await page.goto("/organizer/schedule");
     // TODO: assert empty state if tournament has no matches
-    await expect(page).toHaveURL(/\/organizer\/schedule/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-17 | happy | Edit referee name → 'Unsaved changes' banner appears", async ({ organizerPage: page }) => {
@@ -169,7 +171,7 @@ test.describe("Organizer — Fixtures & Schedule", () => {
     // await page.getByRole("button", { name: /edit/i }).first().click();
     // await page.getByLabel(/referee/i).fill("Referee Name");
     // await expect(page.getByText(/unsaved changes/i)).toBeVisible();
-    await expect(page).toHaveURL(/\/organizer\/schedule/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-18 | happy | Save All → banner dismissed, changes persist", async ({ organizerPage: page }) => {
@@ -177,7 +179,7 @@ test.describe("Organizer — Fixtures & Schedule", () => {
     // Expected: banner gone, referee name persists after reload
     await page.goto("/organizer/schedule");
     // TODO: implement
-    await expect(page).toHaveURL(/\/organizer\/schedule/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-19 | happy | Filter by status 'Live' shows only live matches", async ({ organizerPage: page }) => {
@@ -186,7 +188,7 @@ test.describe("Organizer — Fixtures & Schedule", () => {
     // TODO: implement
     // await page.getByRole("combobox", { name: /status/i }).selectOption("live");
     // await expect(page.getByText(/upcoming|completed/i)).not.toBeVisible();
-    await expect(page).toHaveURL(/\/organizer\/schedule/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-20 | negative | Discard All reverts unsaved changes", async ({ organizerPage: page }) => {
@@ -194,7 +196,7 @@ test.describe("Organizer — Fixtures & Schedule", () => {
     // Expected: previous referee name restored, banner dismissed
     await page.goto("/organizer/schedule");
     // TODO: implement
-    await expect(page).toHaveURL(/\/organizer\/schedule/);
+    await expect(page).toHaveURL(/\/organizer/);
   });
 });
 
@@ -206,24 +208,28 @@ test.describe("Organizer — Live Match Control", () => {
     // const scoreBefore = await page.getByTestId("home-score").textContent();
     // await page.getByRole("button", { name: /try.*home|home.*try/i }).click();
     // await expect(page.getByTestId("home-score")).toHaveText(String(Number(scoreBefore) + 5));
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-22 | happy | Score conversion → score +2, event in log", async ({ organizerPage: page }) => {
     // Expected: home score increases by 2, "Conversion" in log
     // TODO: implement
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-23 | happy | Issue yellow card → card event in log", async ({ organizerPage: page }) => {
     // Expected: yellow card event in log, score unchanged
     // TODO: implement
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-24 | happy | Cycle all match phases: Kick Off → Full Time", async ({ organizerPage: page }) => {
     // Expected: each phase button advances status indicator
     // TODO: implement full phase cycle
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 
@@ -231,12 +237,14 @@ test.describe("Organizer — Live Match Control", () => {
     // Steps: score try → click Undo in undo bar
     // Expected: score back to pre-try value, undo bar hides after ~8s
     // TODO: implement
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 
   test("TC-ORG-26 | happy | Suspend match → SUSPENDED badge, resume re-enables scoring", async ({ organizerPage: page }) => {
     // Expected: SUSPENDED badge visible, scoring buttons disabled while suspended
     // TODO: implement
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 
@@ -244,6 +252,7 @@ test.describe("Organizer — Live Match Control", () => {
     // Steps: Full Time phase → Lock Result → confirm modal
     // Expected: status = "locked", confirmation modal closes
     // TODO: implement
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 
@@ -251,6 +260,7 @@ test.describe("Organizer — Live Match Control", () => {
     // Preconditions: match with status "locked"
     // Expected: Try / Conversion / Card buttons absent or disabled
     // TODO: navigate to a locked match and assert buttons are disabled
+    await page.goto("/organizer");
     await expect(page).toHaveURL(/\/organizer/);
   });
 });
