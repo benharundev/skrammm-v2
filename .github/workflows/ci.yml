@@ -97,6 +97,7 @@ jobs:
         run: pnpm test:e2e
         env:
           CI: true
+          NODE_ENV: development
 
       # Step 8: Build Docker image (validates Dockerfile)
       - name: Set up Docker Buildx
