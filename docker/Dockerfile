@@ -21,6 +21,11 @@ RUN pnpm db:generate && \
       PRISMA_DIR=$(find /app/node_modules/.pnpm -name ".prisma" -type d 2>/dev/null | head -1); \
       [ -n "$PRISMA_DIR" ] && cp -rL "$PRISMA_DIR" /app/node_modules/.prisma \
         || (echo "ERROR: .prisma not found in pnpm store after generate" && exit 1); \
+    fi && \
+    if [ ! -d "/app/node_modules/@prisma/engines" ]; then \
+      ENGINES_DIR=$(find /app/node_modules/.pnpm -name "engines" -type d 2>/dev/null | grep "@prisma/engines$" | head -1); \
+      [ -n "$ENGINES_DIR" ] && (mkdir -p /app/node_modules/@prisma && cp -rL "$ENGINES_DIR" /app/node_modules/@prisma/engines) \
+        || (echo "ERROR: @prisma/engines not found in pnpm store" && exit 1); \
     fi
 ENV NEXT_TELEMETRY_DISABLED=1
 # NEXT_PUBLIC_* vars are inlined at build time — must be passed as build args
