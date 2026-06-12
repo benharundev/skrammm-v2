@@ -116,6 +116,7 @@ test.describe("TM — Squad Management", () => {
     // Steps: clear name field, click Save
     // Expected: validation error, not saved
     // TODO: navigate to an edit page and clear the name field
+    await page.goto("/tm/squad");
     await expect(page).toHaveURL(/\/tm/);
   });
 

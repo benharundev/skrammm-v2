@@ -236,12 +236,14 @@ test.describe("Player — Match Statistics", () => {
     // TODO: navigate to a specific tournament detail page
     // await page.goto("/player/tournaments/{tournamentId}");
     // await expect(page.getByTestId("perf-stats-grid")).toBeVisible();
+    await page.goto("/player");
     await expect(page).toHaveURL(/\/player/);
   });
 
   test("TC-PLY-25 | happy | Tournament detail — per-match rows show results", async ({ playerPage: page }) => {
     // Expected: each match row shows teams, score, result, event icons
     // TODO: navigate to tournament detail and assert match rows
+    await page.goto("/player");
     await expect(page).toHaveURL(/\/player/);
   });
 });
