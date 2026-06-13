@@ -396,6 +396,21 @@ enum MatchEventType {
   red_card
   sub_in
   sub_out
+  // Performance stats — each increment is one event with 0 points
+  tackles_dom
+  tackles_passive
+  tackles_miss
+  line_breaks
+  ball_carries
+  offloads
+  handling_errors
+  rucks_secured
+  turnovers_won
+  scrums_won
+  scrums_lost
+  lineouts_won
+  lineouts_lost
+  penalties_conceded
 }
 
 model MatchEvent {

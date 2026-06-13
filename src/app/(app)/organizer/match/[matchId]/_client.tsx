@@ -252,13 +252,32 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
     scrums_won: 0, scrums_lost: 0, lineouts_won: 0,
     lineouts_lost: 0, penalties_conceded: 0,
   };
-  const [homeStats, setHomeStats] = useState<StatsMap>(EMPTY_STATS);
-  const [awayStats, setAwayStats] = useState<StatsMap>(EMPTY_STATS);
+
+  function buildInitialStats(side: "home" | "away"): StatsMap {
+    const teamId = side === "home" ? match.homeTeam.id : match.awayTeam.id;
+    const counts = { ...EMPTY_STATS };
+    for (const e of match.events) {
+      if (e.teamId === teamId && e.eventType in counts) {
+        counts[e.eventType as StatType] += 1;
+      }
+    }
+    return counts;
+  }
+
+  const [homeStats, setHomeStats] = useState<StatsMap>(() => buildInitialStats("home"));
+  const [awayStats, setAwayStats] = useState<StatsMap>(() => buildInitialStats("away"));
 
   const incrementStat = (team: "home" | "away", stat: StatType) => {
     if (!canScore) return;
     if (team === "home") setHomeStats(s => ({ ...s, [stat]: s[stat] + 1 }));
     else setAwayStats(s => ({ ...s, [stat]: s[stat] + 1 }));
+
+    const teamId = team === "home" ? match.homeTeam.id : match.awayTeam.id;
+    fetch(`/api/organizer/match/${matchId}/event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId, eventType: stat, minute }),
+    }).catch(err => { console.error("[MatchCenter] stat POST failed:", err); });
   };
 
   const clearUndo = useCallback(() => {

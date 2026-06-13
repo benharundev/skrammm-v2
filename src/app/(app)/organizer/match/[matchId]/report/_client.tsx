@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, FileText, Clock, MapPin, User } from "lucide-react";
-import { EVENT_CONFIG } from "@/app/(app)/organizer/_lib/event-config";
+import { EVENT_CONFIG, STAT_CONFIG, STAT_GROUPS } from "@/app/(app)/organizer/_lib/event-config";
 
 const PHASE_LABELS: Record<string, string> = {
   scheduled: "Upcoming",
@@ -29,6 +29,12 @@ export interface NormalizedEvent {
   points: number;
 }
 
+export interface StatEvent {
+  id: string;
+  isHome: boolean;
+  statType: keyof typeof STAT_CONFIG;
+}
+
 export interface MatchReportProps {
   matchId: string;
   status: "scheduled" | "live" | "suspended" | "locked" | "completed";
@@ -43,6 +49,7 @@ export interface MatchReportProps {
   homeShort: string;
   awayShort: string;
   events: NormalizedEvent[];
+  statEvents: StatEvent[];
 }
 
 type ScorerEntry = { name: string; pts: number; labels: string[] };
@@ -74,12 +81,15 @@ export function MatchReportClient({
   homeShort,
   awayShort,
   events,
+  statEvents,
 }: MatchReportProps) {
   const activeRows = SCORING_ROWS.filter(row => {
     const h = events.filter(e => e.isHome && e.type === row.type).length;
     const a = events.filter(e => !e.isHome && e.type === row.type).length;
     return h + a > 0;
   });
+
+  const hasStatEvents = statEvents.length > 0;
 
   const homeScorers = buildScorers(events, true);
   const awayScorers = buildScorers(events, false);
@@ -235,6 +245,47 @@ export function MatchReportClient({
               </div>
             </div>
           )}
+
+          {/* Performance Stats */}
+          <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy">
+            <div className="bg-pitch-green px-5 py-3.5 border-b-2 border-navy">
+              <p className="text-white font-[family-name:var(--font-lexend)] text-sm font-bold">Performance Stats</p>
+            </div>
+            {!hasStatEvents ? (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-muted-foreground italic text-[13px]">No stats recorded — use the stat buttons in the match centre next time</p>
+              </div>
+            ) : (
+              <div className="p-4 flex flex-col gap-4">
+                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-1 mb-1">
+                  <span />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-14 text-center">{homeShort}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-14 text-center">{awayShort}</span>
+                </div>
+                {STAT_GROUPS.map(sg => (
+                  <div key={sg.label}>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2 px-1">{sg.label}</p>
+                    <div className="border-2 border-border rounded-sm overflow-hidden">
+                      {sg.stats.map((stat, idx) => {
+                        const h = statEvents.filter(e => e.isHome && e.statType === stat).length;
+                        const a = statEvents.filter(e => !e.isHome && e.statType === stat).length;
+                        const hWins = h > a;
+                        const aWins = a > h;
+                        return (
+                          <div key={stat}
+                            className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${idx % 2 === 0 ? "bg-muted/20" : ""}`}>
+                            <span className="text-[12px] text-foreground font-medium">{STAT_CONFIG[stat].full}</span>
+                            <span className={`w-14 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${hWins ? "text-pitch-green" : "text-foreground"}`}>{h}</span>
+                            <span className={`w-14 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${aWins ? "text-pitch-green" : "text-foreground"}`}>{a}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Event Log */}
           <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy">

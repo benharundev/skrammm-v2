@@ -2,8 +2,8 @@ import { notFound } from "next/navigation";
 import { requireOrgAuth } from "@lib/auth/server";
 import { getMatchPublicById } from "@modules/match";
 import { MatchReportClient } from "./_client";
-import type { NormalizedEvent } from "./_client";
-import { EVENT_CONFIG } from "@/app/(app)/organizer/_lib/event-config";
+import type { NormalizedEvent, StatEvent } from "./_client";
+import { EVENT_CONFIG, STAT_CONFIG } from "@/app/(app)/organizer/_lib/event-config";
 
 export default async function MatchReportPage({
   params,
@@ -17,6 +17,7 @@ export default async function MatchReportPage({
   if (!match) notFound();
 
   const configKeys = Object.keys(EVENT_CONFIG) as (keyof typeof EVENT_CONFIG)[];
+  const statKeys = Object.keys(STAT_CONFIG) as (keyof typeof STAT_CONFIG)[];
 
   const events: NormalizedEvent[] = match.events
     .filter((e) => configKeys.includes(e.eventType as keyof typeof EVENT_CONFIG))
@@ -31,6 +32,14 @@ export default async function MatchReportPage({
         points: EVENT_CONFIG[type]!.points,
       };
     });
+
+  const statEvents: StatEvent[] = match.events
+    .filter((e) => statKeys.includes(e.eventType as keyof typeof STAT_CONFIG))
+    .map((e) => ({
+      id: e.id,
+      isHome: e.teamId === match.homeTeam.id,
+      statType: e.eventType as keyof typeof STAT_CONFIG,
+    }));
 
   return (
     <MatchReportClient
@@ -51,6 +60,7 @@ export default async function MatchReportPage({
       homeShort={match.homeTeam.name.slice(0, 3).toUpperCase()}
       awayShort={match.awayTeam.name.slice(0, 3).toUpperCase()}
       events={events}
+      statEvents={statEvents}
     />
   );
 }

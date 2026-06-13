@@ -3,6 +3,12 @@ import { z } from "zod";
 export const MatchEventTypeSchema = z.enum([
   "try", "conversion", "penalty", "drop_goal",
   "yellow_card", "red_card", "sub_in", "sub_out",
+  // Performance stats — persisted as zero-point events
+  "tackles_dom", "tackles_passive", "tackles_miss",
+  "line_breaks", "ball_carries", "offloads",
+  "handling_errors", "rucks_secured", "turnovers_won",
+  "scrums_won", "scrums_lost", "lineouts_won",
+  "lineouts_lost", "penalties_conceded",
 ]);
 
 export const AddMatchEventSchema = z.object({
