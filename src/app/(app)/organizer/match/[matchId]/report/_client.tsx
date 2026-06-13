@@ -1,73 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
 import Link from "next/link";
-import {
-  ArrowLeft, Pencil, Save, X, Upload, Download,
-  FileText, Clock, MapPin, User, AlertTriangle,
-} from "lucide-react";
-import { EVENT_CONFIG, STAT_CONFIG, STAT_GROUPS } from "@/app/(app)/organizer/_lib/event-config";
-
-type StatType =
-  | "tackles_dom" | "tackles_passive" | "tackles_miss"
-  | "line_breaks" | "ball_carries" | "offloads"
-  | "handling_errors" | "rucks_secured" | "turnovers_won"
-  | "scrums_won" | "scrums_lost" | "lineouts_won"
-  | "lineouts_lost" | "penalties_conceded";
-
-type StatsMap = Record<StatType, number>;
-
-const EMPTY_STATS: StatsMap = {
-  tackles_dom: 0, tackles_passive: 0, tackles_miss: 0,
-  line_breaks: 0, ball_carries: 0, offloads: 0,
-  handling_errors: 0, rucks_secured: 0, turnovers_won: 0,
-  scrums_won: 0, scrums_lost: 0, lineouts_won: 0,
-  lineouts_lost: 0, penalties_conceded: 0,
-};
-
-const STAT_KEYS = Object.keys(EMPTY_STATS) as StatType[];
-
-const CSV_TEMPLATE = [
-  "stat,home,away",
-  "score,0,0",
-  ...STAT_KEYS.map(k => `${k},0,0`),
-].join("\n");
-
-function parseCSV(text: string): {
-  homeScore: number; awayScore: number;
-  home: StatsMap; away: StatsMap;
-} | string {
-  const lines = text.trim().split(/\r?\n/);
-  const header = lines[0]?.trim().toLowerCase();
-  if (header !== "stat,home,away") return "Expected header: stat,home,away";
-
-  let homeScore = 0;
-  let awayScore = 0;
-  const home = { ...EMPTY_STATS };
-  const away = { ...EMPTY_STATS };
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line?.trim()) continue;
-    const parts = line.split(",");
-    if (parts.length < 3) return `Line ${i + 1}: expected 3 columns`;
-    const [statRaw, homeRaw, awayRaw] = parts;
-    const stat = statRaw?.trim() ?? "";
-    const h = parseInt(homeRaw?.trim() ?? "", 10);
-    const a = parseInt(awayRaw?.trim() ?? "", 10);
-    if (isNaN(h) || isNaN(a)) return `Line ${i + 1}: non-numeric values`;
-
-    if (stat === "score") {
-      homeScore = h;
-      awayScore = a;
-    } else if (STAT_KEYS.includes(stat as StatType)) {
-      home[stat as StatType] = h;
-      away[stat as StatType] = a;
-    }
-  }
-
-  return { homeScore, awayScore, home, away };
-}
+import { ArrowLeft, FileText, Clock, MapPin, User } from "lucide-react";
+import { EVENT_CONFIG } from "@/app/(app)/organizer/_lib/event-config";
 
 const PHASE_LABELS: Record<string, string> = {
   scheduled: "Upcoming",
@@ -75,6 +10,15 @@ const PHASE_LABELS: Record<string, string> = {
   completed: "Completed",
   locked: "Locked",
 };
+
+const SCORING_ROWS = [
+  { type: "try",        label: "Tries",         pts: 5 },
+  { type: "conversion", label: "Conversions",   pts: 2 },
+  { type: "penalty",    label: "Penalties",     pts: 3 },
+  { type: "drop_goal",  label: "Drop Goals",    pts: 3 },
+  { type: "yellow_card",label: "Yellow Cards",  pts: 0 },
+  { type: "red_card",   label: "Red Cards",     pts: 0 },
+] as const;
 
 export interface NormalizedEvent {
   id: string;
@@ -101,11 +45,26 @@ export interface MatchReportProps {
   events: NormalizedEvent[];
 }
 
+type ScorerEntry = { name: string; pts: number; labels: string[] };
+
+function buildScorers(evs: NormalizedEvent[], isHome: boolean): ScorerEntry[] {
+  const map = new Map<string, ScorerEntry>();
+  for (const e of evs) {
+    if (e.isHome !== isHome || e.points === 0) continue;
+    const existing = map.get(e.playerName);
+    const entry = existing ?? { name: e.playerName, pts: 0, labels: [] };
+    entry.pts += e.points;
+    entry.labels.push(EVENT_CONFIG[e.type]!.label);
+    map.set(e.playerName, entry);
+  }
+  return [...map.values()].sort((a, b) => b.pts - a.pts);
+}
+
 export function MatchReportClient({
   matchId,
   status,
-  homeScore: initialHomeScore,
-  awayScore: initialAwayScore,
+  homeScore,
+  awayScore,
   group,
   venue,
   referee,
@@ -116,80 +75,15 @@ export function MatchReportClient({
   awayShort,
   events,
 }: MatchReportProps) {
-  const [editMode, setEditMode] = useState(false);
-  const [homeScore, setHomeScore] = useState(initialHomeScore);
-  const [awayScore, setAwayScore] = useState(initialAwayScore);
-  const [homeStats, setHomeStats] = useState<StatsMap | null>(null);
-  const [awayStats, setAwayStats] = useState<StatsMap | null>(null);
-  const [snapshot, setSnapshot] = useState<{
-    homeScore: number; awayScore: number;
-    homeStats: StatsMap | null; awayStats: StatsMap | null;
-  } | null>(null);
-  const [csvError, setCsvError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const activeRows = SCORING_ROWS.filter(row => {
+    const h = events.filter(e => e.isHome && e.type === row.type).length;
+    const a = events.filter(e => !e.isHome && e.type === row.type).length;
+    return h + a > 0;
+  });
 
-  const canEdit = true;
-
-  const startEdit = () => {
-    setSnapshot({ homeScore, awayScore, homeStats, awayStats });
-    setEditMode(true);
-  };
-
-  const saveEdit = () => {
-    setSnapshot(null);
-    setEditMode(false);
-  };
-
-  const cancelEdit = () => {
-    if (snapshot) {
-      setHomeScore(snapshot.homeScore);
-      setAwayScore(snapshot.awayScore);
-      setHomeStats(snapshot.homeStats);
-      setAwayStats(snapshot.awayStats);
-    }
-    setSnapshot(null);
-    setEditMode(false);
-  };
-
-  const enterManually = () => {
-    setHomeStats({ ...EMPTY_STATS });
-    setAwayStats({ ...EMPTY_STATS });
-    startEdit();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setCsvError(null);
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const text = ev.target?.result as string;
-      const result = parseCSV(text);
-      if (typeof result === "string") {
-        setCsvError(result);
-      } else {
-        setHomeScore(result.homeScore);
-        setAwayScore(result.awayScore);
-        setHomeStats(result.home);
-        setAwayStats(result.away);
-        startEdit();
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  };
-
-  const downloadTemplate = () => {
-    const blob = new Blob([CSV_TEMPLATE], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `match-${matchId}-template.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const statsAvailable = homeStats !== null && awayStats !== null;
+  const homeScorers = buildScorers(events, true);
+  const awayScorers = buildScorers(events, false);
+  const hasScorers = homeScorers.length > 0 || awayScorers.length > 0;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -210,13 +104,13 @@ export function MatchReportClient({
             )}
             <span className="flex items-center gap-1 text-white/60 text-xs"><Clock size={10} />{scheduledTime}</span>
           </div>
-          <p className="text-white text-sm font-bold truncate font-lexend">
+          <p className="text-white text-sm font-bold truncate font-[family-name:var(--font-lexend)]">
             {homeName} vs {awayName}
           </p>
         </div>
         <span className={`px-2.5 py-1 rounded-sm border-2 flex-shrink-0 text-xs font-bold ${
           status === "live" ? "border-fair-play-gold bg-fair-play-gold/20 text-fair-play-gold animate-pulse"
-          : status === "completed" ? "border-white/40 bg-white/10 text-white"
+          : status === "completed" || status === "locked" ? "border-white/40 bg-white/10 text-white"
           : "border-white/20 bg-white/5 text-white/60"
         }`}>
           {PHASE_LABELS[status] ?? status}
@@ -229,19 +123,10 @@ export function MatchReportClient({
           <div className="flex items-center justify-center gap-6 max-w-lg mx-auto">
             <div className="flex flex-col items-end gap-1 flex-1 min-w-0">
               <p className="text-white/80 truncate w-full text-right text-[13px] font-bold">{homeName}</p>
-              {editMode ? (
-                <input
-                  type="number" min="0"
-                  value={homeScore}
-                  onChange={e => setHomeScore(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-20 text-right bg-white/10 border-2 border-fair-play-gold text-fair-play-gold font-lexend text-[40px] font-black leading-none rounded-sm px-2 outline-none"
-                />
-              ) : (
-                <span className="text-fair-play-gold font-lexend text-[52px] font-black leading-none">{homeScore}</span>
-              )}
+              <span className="text-fair-play-gold font-[family-name:var(--font-lexend)] text-[52px] font-black leading-none">{homeScore}</span>
             </div>
             <div className="flex flex-col items-center gap-2 flex-shrink-0">
-              <span className="text-white/30 font-lexend text-[28px] font-black">—</span>
+              <span className="text-white/30 font-[family-name:var(--font-lexend)] text-[28px] font-black">—</span>
               {status === "live" && (
                 <Link href={`/organizer/match/${matchId}`}
                   className="flex items-center gap-1 bg-red-card/90 text-white border-2 border-red-card px-2.5 h-7 rounded-sm hover:bg-red-card transition-colors text-[11px] font-bold">
@@ -251,165 +136,110 @@ export function MatchReportClient({
             </div>
             <div className="flex flex-col items-start gap-1 flex-1 min-w-0">
               <p className="text-white/80 truncate w-full text-[13px] font-bold">{awayName}</p>
-              {editMode ? (
-                <input
-                  type="number" min="0"
-                  value={awayScore}
-                  onChange={e => setAwayScore(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-20 bg-white/10 border-2 border-fair-play-gold text-fair-play-gold font-lexend text-[40px] font-black leading-none rounded-sm px-2 outline-none"
-                />
-              ) : (
-                <span className="text-fair-play-gold font-lexend text-[52px] font-black leading-none">{awayScore}</span>
-              )}
+              <span className="text-fair-play-gold font-[family-name:var(--font-lexend)] text-[52px] font-black leading-none">{awayScore}</span>
             </div>
           </div>
         </div>
 
         <div className="p-4 flex flex-col gap-4">
-          {/* Edit / Save / Cancel toolbar */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <FileText size={14} className="text-muted-foreground" />
-              <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">Match Report</p>
-            </div>
-            {editMode ? (
-              <div className="flex items-center gap-2">
-                <button onClick={saveEdit}
-                  className="flex items-center gap-1.5 bg-pitch-green text-white border-2 border-pitch-green px-3 h-8 rounded-sm hover:bg-pitch-green/90 transition-colors text-xs font-bold shadow-brutalist-navy-xs">
-                  <Save size={12} /> Save
-                </button>
-                <button onClick={cancelEdit}
-                  className="flex items-center gap-1.5 border-2 border-border text-muted-foreground px-3 h-8 rounded-sm hover:border-navy hover:text-foreground transition-colors text-xs font-bold">
-                  <X size={12} /> Cancel
-                </button>
-              </div>
-            ) : canEdit ? (
-              <button onClick={startEdit}
-                className="flex items-center gap-1.5 border-2 border-border text-foreground px-3 h-8 rounded-sm hover:border-navy transition-colors text-xs font-bold">
-                <Pencil size={12} /> Edit
-              </button>
-            ) : null}
+          {/* Report label */}
+          <div className="flex items-center gap-2">
+            <FileText size={14} className="text-muted-foreground" />
+            <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">Match Report</p>
           </div>
 
-          {/* Performance Stats */}
+          {/* Scoring Breakdown */}
           <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy">
-            <div className="bg-pitch-green px-5 py-3.5 border-b-2 border-navy flex items-center justify-between">
-              <p className="text-white font-lexend text-sm font-bold">Performance Stats</p>
-              {statsAvailable && !editMode && canEdit && (
-                <button onClick={startEdit}
-                  className="flex items-center gap-1 border-2 border-white/30 text-white/80 px-2 h-6 rounded-sm hover:border-white hover:text-white transition-colors text-[10px] font-bold">
-                  <Pencil size={10} /> Edit
-                </button>
-              )}
+            <div className="bg-pitch-green px-5 py-3.5 border-b-2 border-navy">
+              <p className="text-white font-[family-name:var(--font-lexend)] text-sm font-bold">Scoring Breakdown</p>
             </div>
-
-            {!statsAvailable ? (
-              <div className="p-6 flex flex-col items-center gap-4">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <AlertTriangle size={16} />
-                  <p className="text-sm font-semibold">No stats recorded for this match</p>
-                </div>
-                <p className="text-[12px] text-muted-foreground text-center max-w-xs">
-                  Upload a CSV file with stat data, or enter values manually.
-                </p>
-                {csvError && (
-                  <div className="bg-red-card/10 border-2 border-red-card rounded-sm px-4 py-2.5 w-full max-w-xs">
-                    <p className="text-red-card text-xs font-bold">CSV error: {csvError}</p>
-                  </div>
-                )}
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <button onClick={() => fileRef.current?.click()}
-                    className="flex items-center gap-1.5 bg-pitch-green text-white border-2 border-pitch-green px-4 h-9 rounded-sm hover:bg-pitch-green/90 transition-colors text-[13px] font-bold shadow-brutalist-navy-sm">
-                    <Upload size={14} /> Upload CSV
-                  </button>
-                  <button onClick={downloadTemplate}
-                    className="flex items-center gap-1.5 border-2 border-border text-foreground px-4 h-9 rounded-sm hover:border-navy transition-colors text-[13px] font-bold">
-                    <Download size={14} /> Template
-                  </button>
-                  <button onClick={enterManually}
-                    className="flex items-center gap-1.5 border-2 border-border text-muted-foreground px-4 h-9 rounded-sm hover:border-navy hover:text-foreground transition-colors text-[13px]">
-                    Enter manually
-                  </button>
-                </div>
-                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+            {activeRows.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-muted-foreground italic text-[13px]">No events recorded</p>
               </div>
             ) : (
-              <div className="p-4">
-                {csvError && (
-                  <div className="bg-red-card/10 border-2 border-red-card rounded-sm px-4 py-2.5 mb-4">
-                    <p className="text-red-card text-xs font-bold">CSV error: {csvError}</p>
-                  </div>
-                )}
+              <div>
                 {/* Column headers */}
-                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 mb-2 px-1">
+                <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-4 py-2 border-b border-border bg-muted/20">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60" />
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-16 text-center truncate">{homeShort}</span>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-16 text-center truncate">{awayShort}</span>
                 </div>
-
-                {STAT_GROUPS.map(group => (
-                  <div key={group.label} className="mb-4 last:mb-0">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2 px-1">{group.label}</p>
-                    <div className="border-2 border-border rounded-sm overflow-hidden">
-                      {group.stats.map((stat, idx) => {
-                        const hVal = homeStats?.[stat] ?? 0;
-                        const aVal = awayStats?.[stat] ?? 0;
-                        const hWins = hVal > aVal;
-                        const aWins = aVal > hVal;
-                        return (
-                          <div key={stat}
-                            className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${idx % 2 === 0 ? "bg-muted/20" : ""}`}>
-                            <span className="text-[12px] text-foreground font-medium">{STAT_CONFIG[stat].full}</span>
-                            {editMode ? (
-                              <>
-                                <input
-                                  type="number" min="0"
-                                  value={hVal}
-                                  onChange={e => setHomeStats(s => s ? { ...s, [stat]: Math.max(0, parseInt(e.target.value) || 0) } : s)}
-                                  className="w-16 text-center h-7 border-2 border-fair-play-gold/60 bg-fair-play-gold/5 rounded-sm text-[13px] font-bold outline-none focus:border-fair-play-gold"
-                                />
-                                <input
-                                  type="number" min="0"
-                                  value={aVal}
-                                  onChange={e => setAwayStats(s => s ? { ...s, [stat]: Math.max(0, parseInt(e.target.value) || 0) } : s)}
-                                  className="w-16 text-center h-7 border-2 border-fair-play-gold/60 bg-fair-play-gold/5 rounded-sm text-[13px] font-bold outline-none focus:border-fair-play-gold"
-                                />
-                              </>
-                            ) : (
-                              <>
-                                <span className={`w-16 text-center font-lexend text-sm font-extrabold ${hWins ? "text-pitch-green" : "text-foreground"}`}>{hVal}</span>
-                                <span className={`w-16 text-center font-lexend text-sm font-extrabold ${aWins ? "text-pitch-green" : "text-foreground"}`}>{aVal}</span>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                <div className="border-t border-border">
+                  {activeRows.map((row, idx) => {
+                    const h = events.filter(e => e.isHome && e.type === row.type).length;
+                    const a = events.filter(e => !e.isHome && e.type === row.type).length;
+                    const hWins = h > a;
+                    const aWins = a > h;
+                    return (
+                      <div key={row.type}
+                        className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-4 py-2.5 ${idx % 2 === 0 ? "bg-muted/10" : ""}`}>
+                        <span className="text-[13px] text-foreground font-medium">{row.label}</span>
+                        <span className={`w-16 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${hWins ? "text-pitch-green" : "text-foreground"}`}>{h}</span>
+                        <span className={`w-16 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${aWins ? "text-pitch-green" : "text-foreground"}`}>{a}</span>
+                      </div>
+                    );
+                  })}
+                  {/* Total Points row */}
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-4 py-3 border-t-2 border-border bg-muted/30">
+                    <span className="text-[13px] text-foreground font-black uppercase tracking-wide">Total Points</span>
+                    <span className={`w-16 text-center font-[family-name:var(--font-lexend)] text-base font-black ${homeScore > awayScore ? "text-pitch-green" : "text-foreground"}`}>{homeScore}</span>
+                    <span className={`w-16 text-center font-[family-name:var(--font-lexend)] text-base font-black ${awayScore > homeScore ? "text-pitch-green" : "text-foreground"}`}>{awayScore}</span>
                   </div>
-                ))}
-
-                {/* Upload replacement if already has stats */}
-                {!editMode && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <button onClick={() => fileRef.current?.click()}
-                      className="flex items-center gap-1.5 border-2 border-border text-muted-foreground px-3 h-7 rounded-sm hover:border-navy hover:text-foreground transition-colors text-[11px]">
-                      <Upload size={11} /> Replace with CSV
-                    </button>
-                    <button onClick={downloadTemplate}
-                      className="flex items-center gap-1.5 border-2 border-border text-muted-foreground px-3 h-7 rounded-sm hover:border-navy hover:text-foreground transition-colors text-[11px]">
-                      <Download size={11} /> Template
-                    </button>
-                    <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
-                  </div>
-                )}
+                </div>
               </div>
             )}
           </div>
 
+          {/* Scorers */}
+          {hasScorers && (
+            <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy">
+              <div className="bg-pitch-green px-5 py-3.5 border-b-2 border-navy">
+                <p className="text-white font-[family-name:var(--font-lexend)] text-sm font-bold">Scorers</p>
+              </div>
+              <div className="grid grid-cols-2 divide-x divide-border">
+                {/* Home scorers */}
+                <div className="p-3 flex flex-col gap-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">{homeShort}</p>
+                  {homeScorers.length === 0 ? (
+                    <p className="text-muted-foreground text-xs italic">—</p>
+                  ) : (
+                    homeScorers.map(s => (
+                      <div key={s.name} className="flex flex-col gap-0.5">
+                        <p className="text-[13px] font-semibold text-foreground leading-tight">{s.name}</p>
+                        <p className="text-[11px] text-muted-foreground leading-tight">
+                          {s.labels.join(", ")}
+                          <span className="text-pitch-green font-bold ml-1">+{s.pts}</span>
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {/* Away scorers */}
+                <div className="p-3 flex flex-col gap-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 mb-1">{awayShort}</p>
+                  {awayScorers.length === 0 ? (
+                    <p className="text-muted-foreground text-xs italic">—</p>
+                  ) : (
+                    awayScorers.map(s => (
+                      <div key={s.name} className="flex flex-col gap-0.5">
+                        <p className="text-[13px] font-semibold text-foreground leading-tight">{s.name}</p>
+                        <p className="text-[11px] text-muted-foreground leading-tight">
+                          {s.labels.join(", ")}
+                          <span className="text-pitch-green font-bold ml-1">+{s.pts}</span>
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Event Log */}
           <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy">
             <div className="bg-pitch-green px-5 py-3.5 border-b-2 border-navy flex items-center justify-between">
-              <p className="text-white font-lexend text-sm font-bold">Event Log</p>
+              <p className="text-white font-[family-name:var(--font-lexend)] text-sm font-bold">Event Log</p>
               <span className="bg-fair-play-gold text-pitch-green px-2 py-0.5 rounded-sm text-[11px] font-bold">
                 {events.length} events
               </span>
@@ -422,7 +252,7 @@ export function MatchReportClient({
               <div className="divide-y divide-border max-h-80 overflow-y-auto">
                 {events.map((ev) => (
                   <div key={ev.id} className={`px-5 py-3 flex items-center gap-3 ${ev.isHome ? "" : "flex-row-reverse"}`}>
-                    <span className="bg-pitch-green/10 text-pitch-green w-10 text-center rounded-sm flex-shrink-0 font-lexend text-xs font-extrabold">
+                    <span className="bg-pitch-green/10 text-pitch-green w-10 text-center rounded-sm flex-shrink-0 font-[family-name:var(--font-lexend)] text-xs font-extrabold">
                       {ev.minute}&apos;
                     </span>
                     <span className={`px-2 py-0.5 rounded-sm flex-shrink-0 text-[11px] font-black ${EVENT_CONFIG[ev.type]!.colorClass}`}>
@@ -433,7 +263,7 @@ export function MatchReportClient({
                       <p className="text-muted-foreground text-[11px]">{ev.isHome ? homeShort : awayShort}</p>
                     </div>
                     {ev.points > 0 && (
-                      <span className="text-pitch-green flex-shrink-0 font-lexend text-sm font-extrabold">+{ev.points}</span>
+                      <span className="text-pitch-green flex-shrink-0 font-[family-name:var(--font-lexend)] text-sm font-extrabold">+{ev.points}</span>
                     )}
                   </div>
                 ))}
