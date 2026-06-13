@@ -35,7 +35,7 @@ export async function middleware(request: NextRequest) {
     !APP_PREFIXES.some((p) => pathname.startsWith(p));
 
   if (!isPublicPath) {
-    const isOrganizerPath = pathname.startsWith("/organizer");
+    const isOrganizerPath = pathname.startsWith("/organizer") || pathname.startsWith("/api/organizer");
 
     if (isOrganizerPath) {
       const orgToken =
