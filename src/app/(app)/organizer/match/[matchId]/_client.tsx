@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import {
   ArrowLeft, Zap, Clock, MapPin, User,
@@ -333,45 +334,70 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
     }).catch(err => { console.error("[MatchCenter] DELETE event failed:", err); });
   };
 
-  function postPhase(status: string) {
-    fetch(`/api/organizer/match/${matchId}/phase`, {
+  async function postPhase(status: string): Promise<void> {
+    const res = await fetch(`/api/organizer/match/${matchId}/phase`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
-    }).catch(err => { console.error("[MatchCenter] POST phase failed:", err); });
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      throw new Error(data.error ?? "Phase update failed");
+    }
   }
 
-  const advancePhase = () => {
+  const advancePhase = async () => {
+    const prev = phase;
     const next = PHASE_NEXT[phase];
     if (!next) return;
     if (next === "locked") { setShowLockDialog(true); return; }
     setPhase(next);
-    if (next === "first_half") {
-      setMinute(0);
-      postPhase("live");
+    try {
+      if (next === "first_half") { setMinute(0); await postPhase("live"); }
+      if (next === "second_half") setMinute(40);
+      // halftime → second_half and first_half → halftime are both "live" in DB; no phase API call needed
+      if (next === "completed") await postPhase("completed");
+    } catch (err) {
+      setPhase(prev);
+      toast.error(err instanceof Error ? err.message : "Failed to update match phase");
     }
-    if (next === "second_half") setMinute(40);
-    // halftime → second_half and first_half → halftime are both "live" in DB; no phase API call needed
-    if (next === "completed") postPhase("completed");
   };
 
-  const suspend = () => {
+  const suspend = async () => {
+    const prev = phase;
     setShowSuspendDialog(false);
-    setPrePhase(phase);
+    setPrePhase(prev);
     setPhase("suspended");
-    postPhase("suspended");
+    try {
+      await postPhase("suspended");
+    } catch (err) {
+      setPhase(prev);
+      toast.error(err instanceof Error ? err.message : "Failed to suspend match");
+    }
   };
 
-  const resume = () => {
-    setPhase(prePhase ?? "second_half");
+  const resume = async () => {
+    const prev = phase;
+    const next = prePhase ?? "second_half";
+    setPhase(next);
     setPrePhase(null);
-    postPhase("live");
+    try {
+      await postPhase("live");
+    } catch (err) {
+      setPhase(prev);
+      toast.error(err instanceof Error ? err.message : "Failed to resume match");
+    }
   };
 
-  const lockResult = () => {
+  const lockResult = async () => {
     setShowLockDialog(false);
     setPhase("locked");
-    postPhase("locked");
+    try {
+      await postPhase("locked");
+    } catch (err) {
+      setPhase("completed");
+      toast.error(err instanceof Error ? err.message : "Failed to lock match");
+    }
   };
 
   useEffect(() => { return () => { if (undoItem) clearTimeout(undoItem.timeout); }; }, [undoItem]);
