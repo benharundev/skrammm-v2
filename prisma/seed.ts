@@ -4,7 +4,7 @@
  * for Kelantan's 3 completed matches.
  *
  * Dev accounts:
- *   organizer@skrammm.dev  — organizer portal
+ *   adibhaziqalias@gmail.com  — organizer portal
  *   tm@skrammm.dev         — Kelantan team manager
  *   player@skrammm.dev     — Asyraf Zulkiflee (Kelantan hooker)
  *
@@ -245,8 +245,8 @@ async function main() {
   // 1. Users
   await prisma.user.upsert({
     where:  { id: IDs.users.organizer },
-    update: { email: "organizer@skrammm.dev" },
-    create: { id: IDs.users.organizer, email: "organizer@skrammm.dev", name: "Dev Organizer", emailVerified: true },
+    update: { email: "adibhaziqalias@gmail.com" },
+    create: { id: IDs.users.organizer, email: "adibhaziqalias@gmail.com", name: "Dev Organizer", emailVerified: true },
   });
   await prisma.user.upsert({
     where:  { id: IDs.users.tm },
@@ -481,7 +481,7 @@ async function main() {
   }
 
   console.log("✓ Seed complete. Tournament code: pialagong26");
-  console.log("  Organizer: organizer@skrammm.dev");
+  console.log("  Organizer: adibhaziqalias@gmail.com");
   console.log("  TM (Kelantan): tm@skrammm.dev");
   console.log("  Player (Asyraf Zulkiflee): player@skrammm.dev");
   console.log("  Open: http://localhost:3000/pialagong26");

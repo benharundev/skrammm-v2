@@ -44,10 +44,7 @@ export const orgAuth = betterAuth({
 
   advanced: {
     generateId: () => uuidv7(),
-    cookiePrefix:
-      process.env.NODE_ENV === "production"
-        ? "__Secure-skrammm-org"
-        : "skrammm-org",
+    cookiePrefix: "skrammm-org",
     crossSubDomainCookies: {
       enabled: process.env.NODE_ENV === "production",
       domain: ".skrammm.com",

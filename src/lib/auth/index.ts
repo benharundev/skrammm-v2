@@ -26,6 +26,10 @@ export const auth = betterAuth({
           g.__MOCK_OTPS__.set(email, otp);
         }
 
+        if (process.env.OTP_DEBUG === "true") {
+          console.log(`[OTP_DEBUG] ${email} → ${otp}`);
+        }
+
         await sendOTP(email, otp);
       },
       otpLength: 6,
@@ -43,8 +47,7 @@ export const auth = betterAuth({
 
   advanced: {
     generateId: () => uuidv7(),
-    cookiePrefix:
-      process.env.NODE_ENV === "production" ? "__Secure-skrammm" : "skrammm",
+    cookiePrefix: "skrammm",
     crossSubDomainCookies: {
       enabled: process.env.NODE_ENV === "production",
       domain: ".skrammm.com",
