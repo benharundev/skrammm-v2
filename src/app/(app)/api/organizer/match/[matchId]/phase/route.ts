@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { requireAuth } from "@lib/auth/server";
+import { revalidatePath } from "next/cache";
+import { requireOrgAuth } from "@lib/auth/server";
 import { transitionMatchPhase, getMatchTournamentId } from "@modules/match";
 import { can } from "@modules/shared";
 import type { MatchPhaseStatus } from "@modules/match";
@@ -20,7 +21,7 @@ export async function POST(
 ) {
   try {
     const { matchId } = await params;
-    const session = await requireAuth();
+    const session = await requireOrgAuth();
 
     const tournamentId = await getMatchTournamentId(matchId);
     if (!tournamentId) return Response.json({ error: "Not found" }, { status: 404 });
@@ -37,6 +38,10 @@ export async function POST(
     }
 
     await transitionMatchPhase(matchId, body.status as MatchPhaseStatus);
+    revalidatePath("/organizer");
+    revalidatePath("/organizer/schedule");
+    revalidatePath("/organizer/standings");
+    revalidatePath(`/organizer/match/${matchId}/report`);
     return Response.json({ ok: true });
   } catch (err) {
     return Response.json(

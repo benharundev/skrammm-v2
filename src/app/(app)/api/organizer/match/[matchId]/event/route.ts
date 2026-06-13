@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
-import { requireAuth } from "@lib/auth/server";
+import { revalidatePath } from "next/cache";
+import { requireOrgAuth } from "@lib/auth/server";
 import { addMatchEvent, deleteMatchEvent, getMatchTournamentId } from "@modules/match";
 import { can } from "@modules/shared";
 
@@ -11,7 +12,7 @@ export async function POST(
 ) {
   try {
     const { matchId } = await params;
-    const session = await requireAuth();
+    const session = await requireOrgAuth();
 
     const tournamentId = await getMatchTournamentId(matchId);
     if (!tournamentId) return Response.json({ error: "Not found" }, { status: 404 });
@@ -37,6 +38,9 @@ export async function POST(
       playerId: typeof body.playerId === "string" ? body.playerId : undefined,
     });
 
+    revalidatePath("/organizer");
+    revalidatePath("/organizer/schedule");
+    revalidatePath(`/organizer/match/${matchId}/report`);
     return Response.json({ ok: true, eventId: result.eventId });
 
   } catch (err) {
@@ -53,7 +57,7 @@ export async function DELETE(
 ) {
   try {
     const { matchId } = await params;
-    const session = await requireAuth();
+    const session = await requireOrgAuth();
 
     const tournamentId = await getMatchTournamentId(matchId);
     if (!tournamentId) return Response.json({ error: "Not found" }, { status: 404 });
@@ -67,6 +71,9 @@ export async function DELETE(
     }
 
     await deleteMatchEvent(matchId, body.eventId);
+    revalidatePath("/organizer");
+    revalidatePath("/organizer/schedule");
+    revalidatePath(`/organizer/match/${matchId}/report`);
     return Response.json({ ok: true });
   } catch (err) {
     return Response.json(
