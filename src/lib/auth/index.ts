@@ -27,7 +27,7 @@ export const auth = betterAuth({
         }
 
         if (process.env.OTP_DEBUG === "true") {
-          console.log(`[OTP_DEBUG] ${email} → ${otp}`);
+          console.warn(`[OTP_DEBUG] ${email} → ${otp}`);
         }
 
         await sendOTP(email, otp);
