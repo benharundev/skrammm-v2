@@ -272,50 +272,61 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
     setPendingAction({ team, type, playerName: "", playerId: null });
   };
 
-  const confirmScore = () => {
+  const confirmScore = async () => {
     if (!pendingAction) return;
     const pts = EVENT_CONFIG[pendingAction.type]!.points;
+    const teamSide = pendingAction.team;
+    const eventType = pendingAction.type;
+    const playerId = pendingAction.playerId;
     const optimisticId = uuidv7();
     const newEvent: MatchEvent = {
       id: optimisticId,
       minute,
-      team: pendingAction.team,
-      type: pendingAction.type,
+      team: teamSide,
+      type: eventType,
       playerName: pendingAction.playerName || "Unknown",
       points: pts,
     };
 
-    if (pendingAction.team === "home") setHomeScore(s => s + pts);
+    if (teamSide === "home") setHomeScore(s => s + pts);
     else setAwayScore(s => s + pts);
-
     setEvents(ev => [newEvent, ...ev]);
-
     clearUndo();
     const t = setTimeout(() => setUndoItem(null), 8000);
     setUndoItem({ event: newEvent, timeout: t });
     setPendingAction(null);
 
-    // POST event then swap optimistic ID for server-assigned ID so undo DELETE targets the right row
-    const teamId = pendingAction.team === "home" ? match.homeTeam.id : match.awayTeam.id;
-    fetch(`/api/organizer/match/${matchId}/event`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        teamId,
-        eventType: pendingAction.type,
-        minute,
-        ...(pendingAction.playerId ? { playerId: pendingAction.playerId } : {}),
-      }),
-    })
-      .then(r => r.json() as Promise<{ ok: boolean; eventId?: string }>)
-      .then(data => {
-        if (data.eventId) {
-          const serverId = data.eventId;
-          setEvents(evs => evs.map(e => e.id === optimisticId ? { ...e, id: serverId } : e));
-          setUndoItem(prev => prev?.event.id === optimisticId ? { ...prev, event: { ...prev.event, id: serverId } } : prev);
-        }
-      })
-      .catch(err => { console.error("[MatchCenter] POST event failed:", err); });
+    const teamId = teamSide === "home" ? match.homeTeam.id : match.awayTeam.id;
+    try {
+      const res = await fetch(`/api/organizer/match/${matchId}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamId,
+          eventType,
+          minute,
+          ...(playerId ? { playerId } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(errData.error ?? "Failed to record event");
+      }
+      const data = await res.json() as { ok: boolean; eventId?: string };
+      if (data.eventId) {
+        const serverId = data.eventId;
+        setEvents(evs => evs.map(e => e.id === optimisticId ? { ...e, id: serverId } : e));
+        setUndoItem(prev =>
+          prev?.event.id === optimisticId ? { ...prev, event: { ...prev.event, id: serverId } } : prev
+        );
+      }
+    } catch (err) {
+      if (teamSide === "home") setHomeScore(s => s - pts);
+      else setAwayScore(s => s - pts);
+      setEvents(evs => evs.filter(e => e.id !== optimisticId));
+      clearUndo();
+      toast.error(err instanceof Error ? err.message : "Failed to record event");
+    }
   };
 
   const undoLast = () => {
