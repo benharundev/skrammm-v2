@@ -111,20 +111,20 @@ export function CommentatorClient({ match }: { match: Match }) {
   );
 
   return (
-    <div className="min-h-screen bg-navy text-white font-[family-name:var(--font-lexend)]">
+    <div className="min-h-dvh bg-background font-[family-name:var(--font-lexend)]">
 
       {/* ── Header ── */}
-      <header className="border-b-2 border-white/10 px-4 py-3 flex items-center justify-between">
+      <header className="border-b-2 border-border px-4 py-3 flex items-center justify-between bg-card">
         <Link
           href={`/organizer/match/${match.id}` as Route}
-          className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors cursor-pointer"
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
           <ArrowLeft className="h-4 w-4" />
           Match Center
         </Link>
         <div className="flex items-center gap-2">
-          <Radio className="h-3.5 w-3.5 text-white/30" />
-          <span className="text-xs font-extrabold tracking-widest text-white/50 uppercase">
+          <Radio className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-extrabold tracking-widest text-muted-foreground uppercase">
             Commentator View
           </span>
         </div>
@@ -134,29 +134,29 @@ export function CommentatorClient({ match }: { match: Match }) {
               connected ? "bg-pitch-green animate-pulse" : "bg-red-card"
             }`}
           />
-          <span className={connected ? "text-pitch-green font-bold" : "text-red-400 font-bold"}>
+          <span className={`font-bold ${connected ? "text-pitch-green" : "text-red-card"}`}>
             {connected ? "LIVE FEED" : "RECONNECTING"}
           </span>
           {connected ? (
             <Wifi className="h-3.5 w-3.5 text-pitch-green" />
           ) : (
-            <WifiOff className="h-3.5 w-3.5 text-red-400" />
+            <WifiOff className="h-3.5 w-3.5 text-red-card" />
           )}
         </div>
       </header>
 
-      {/* ── Score Hero ── */}
-      <section className="relative border-b-4 border-pitch-green bg-navy px-6 py-8">
-        <p className="text-center text-[10px] font-extrabold tracking-widest text-pitch-green/70 mb-3 uppercase">
+      {/* ── Score Hero — pitch-green like other organizer section headers ── */}
+      <section className="bg-pitch-green text-white border-b-4 border-navy px-6 py-8">
+        <p className="text-center text-[10px] font-extrabold tracking-widest text-white/70 mb-4 uppercase">
           {match.tournament.name}
           {match.groupLabel ? ` · ${match.groupLabel}` : ""}
         </p>
 
         <div className="flex items-stretch justify-between max-w-2xl mx-auto gap-6">
           {/* Home team */}
-          <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center gap-1.5 text-center">
             <p className="text-2xl font-extrabold tracking-tight leading-tight">{match.homeTeam.name}</p>
-            <span className="text-[10px] font-black tracking-widest text-pitch-green/60 uppercase border border-pitch-green/30 px-2 py-0.5 rounded-sm">
+            <span className="text-[10px] font-black tracking-widest text-white/50 uppercase border border-white/30 px-2 py-0.5 rounded-sm">
               HOME
             </span>
           </div>
@@ -165,20 +165,20 @@ export function CommentatorClient({ match }: { match: Match }) {
           <div className="flex flex-col items-center gap-2 shrink-0">
             <div className="flex items-center gap-4">
               <span className="text-7xl font-extrabold tabular-nums leading-none">{homeScore}</span>
-              <span className="text-4xl font-bold text-white/20">–</span>
+              <span className="text-4xl font-bold text-white/30">–</span>
               <span className="text-7xl font-extrabold tabular-nums leading-none">{awayScore}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mt-1">
               {isLive && (
-                <span className="inline-block w-2 h-2 rounded-full bg-pitch-green animate-pulse shrink-0" />
+                <span className="inline-block w-2 h-2 rounded-full bg-fair-play-gold animate-pulse shrink-0" />
               )}
               <span
                 className={`text-xs font-extrabold tracking-widest px-3 py-1 rounded-sm ${
                   isLive
-                    ? "bg-pitch-green text-white"
+                    ? "bg-fair-play-gold text-pitch-green"
                     : status === "completed" || status === "locked"
-                    ? "bg-white/10 text-white/50"
-                    : "bg-fair-play-gold/20 text-fair-play-gold"
+                    ? "bg-white/10 text-white/60"
+                    : "bg-white/20 text-white"
                 }`}
               >
                 {STATUS_LABEL[status] ?? status.toUpperCase()}
@@ -187,16 +187,16 @@ export function CommentatorClient({ match }: { match: Match }) {
           </div>
 
           {/* Away team */}
-          <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center gap-1.5 text-center">
             <p className="text-2xl font-extrabold tracking-tight leading-tight">{match.awayTeam.name}</p>
-            <span className="text-[10px] font-black tracking-widest text-white/40 uppercase border border-white/20 px-2 py-0.5 rounded-sm">
+            <span className="text-[10px] font-black tracking-widest text-white/50 uppercase border border-white/30 px-2 py-0.5 rounded-sm">
               AWAY
             </span>
           </div>
         </div>
 
         {/* Match metadata */}
-        <div className="mt-5 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-white/40">
+        <div className="mt-5 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-white/50">
           {match.pitch && (
             <span className="flex items-center gap-1.5">
               <MapPin className="h-3 w-3" />
@@ -294,17 +294,19 @@ function LineupPanel({
   );
 
   return (
-    <div className="border-2 border-white/15 rounded-sm overflow-hidden">
-      <div className="px-4 py-2.5 bg-white/[0.08] border-b-2 border-white/15 flex items-center justify-between">
-        <p className="text-[10px] font-extrabold tracking-widest text-white/60 uppercase flex items-center gap-1.5">
+    <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy">
+      {/* Panel header */}
+      <div className="bg-pitch-green px-4 py-3 border-b-2 border-navy flex items-center justify-between">
+        <p className="text-white font-[family-name:var(--font-lexend)] text-sm font-bold flex items-center gap-2">
           {side === "home"
-            ? <Home className="h-3 w-3 inline" />
-            : <Plane className="h-3 w-3 inline" />}
-          {side === "home" ? "Home" : "Away"}&ensp;·&ensp;{team.name}
+            ? <Home className="h-3.5 w-3.5" />
+            : <Plane className="h-3.5 w-3.5" />}
+          {side === "home" ? "Home" : "Away"} · {team.name}
         </p>
-        <span className="text-[10px] text-white/30 font-bold">{team.players.length} players</span>
+        <span className="text-white/50 text-[10px] font-bold">{team.players.length}p</span>
       </div>
-      <ul className="divide-y divide-white/[0.06]">
+
+      <ul className="divide-y divide-border">
         {team.players.map((player) => {
           const stat = playerPoints.get(player.id);
           const cardedEntry = cardedMap.get(player.id);
@@ -316,57 +318,52 @@ function LineupPanel({
           return (
             <li
               key={player.id}
-              className={`flex items-center gap-3 px-3 py-2 transition-colors ${
+              className={`flex items-center gap-3 px-3 py-2 border-l-2 transition-colors ${
                 isTopScorer
-                  ? "bg-pitch-green/15 border-l-2 border-pitch-green"
+                  ? "bg-pitch-green/10 border-l-pitch-green"
                   : isTopTry
-                  ? "bg-pitch-green/8 border-l-2 border-pitch-green/50"
+                  ? "bg-pitch-green/5 border-l-pitch-green/40"
                   : carded
                   ? redCarded
-                    ? "bg-red-card/10 border-l-2 border-red-card"
-                    : "bg-fair-play-gold/8 border-l-2 border-fair-play-gold"
-                  : "border-l-2 border-transparent"
+                    ? "bg-destructive/5 border-l-red-card"
+                    : "bg-fair-play-gold/10 border-l-fair-play-gold"
+                  : "border-l-transparent"
               }`}
             >
               {/* Jersey number */}
-              <span className="w-7 text-center text-sm font-extrabold text-white/40 shrink-0 tabular-nums">
+              <span className="w-7 text-center text-sm font-extrabold text-muted-foreground shrink-0 tabular-nums">
                 {player.jerseyNumber ?? "–"}
               </span>
 
               {/* Name + position */}
               <div className="flex-1 min-w-0">
-                <span className="text-sm font-semibold truncate block leading-tight">
+                <span className="text-sm font-semibold truncate block leading-tight text-foreground">
                   {player.fullName}
                 </span>
                 {player.position && (
-                  <span className="text-[10px] text-white/35 uppercase tracking-wide">{player.position}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{player.position}</span>
                 )}
               </div>
 
               {/* Badges */}
               <div className="flex items-center gap-1.5 shrink-0">
-                {isTopScorer && (
-                  <Star className="h-3.5 w-3.5 text-fair-play-gold" />
-                )}
-                {isTopTry && !isTopScorer && (
-                  <Zap className="h-3.5 w-3.5 text-pitch-green" />
-                )}
+                {isTopScorer && <Star className="h-3.5 w-3.5 text-fair-play-gold" />}
+                {isTopTry && !isTopScorer && <Zap className="h-3.5 w-3.5 text-pitch-green" />}
                 {stat && stat.tries > 0 && (
-                  <span className="text-[10px] font-extrabold text-pitch-green bg-pitch-green/15 px-1.5 py-0.5 rounded-sm">
+                  <span className="text-[10px] font-extrabold text-pitch-green bg-pitch-green/10 px-1.5 py-0.5 rounded-sm">
                     T×{stat.tries}
                   </span>
                 )}
-                {/* Card indicator */}
                 {carded && (
                   <span
-                    className={`w-3 h-4 rounded-sm inline-block shrink-0 shadow-sm ${
+                    className={`w-3 h-4 rounded-sm inline-block shrink-0 ${
                       redCarded ? "bg-red-card" : "bg-fair-play-gold"
                     }`}
                     title={redCarded ? "Red card" : "Yellow card"}
                   />
                 )}
                 {stat && stat.points > 0 && (
-                  <span className="text-[11px] font-bold text-white/50 tabular-nums">{stat.points}pts</span>
+                  <span className="text-[11px] font-bold text-muted-foreground tabular-nums">{stat.points}pts</span>
                 )}
               </div>
             </li>
@@ -379,13 +376,13 @@ function LineupPanel({
 
 // ── Scoring Breakdown ─────────────────────────────────────────────────────────
 
-const BREAKDOWN_ROWS: { key: keyof ScoringCounts; label: string; accent?: string }[] = [
-  { key: "try",         label: "Tries",         accent: "text-pitch-green" },
-  { key: "conversion",  label: "Conversions",   accent: "text-pitch-green/70" },
-  { key: "penalty",     label: "Penalties",     accent: "text-fair-play-gold" },
-  { key: "drop_goal",   label: "Drop Goals",    accent: "text-fair-play-gold/70" },
-  { key: "yellow_card", label: "Yellow Cards",  accent: "text-fair-play-gold" },
-  { key: "red_card",    label: "Red Cards",     accent: "text-red-card" },
+const BREAKDOWN_ROWS: { key: keyof ScoringCounts; label: string; winColor: string }[] = [
+  { key: "try",         label: "Tries",        winColor: "text-pitch-green" },
+  { key: "conversion",  label: "Conversions",  winColor: "text-pitch-green" },
+  { key: "penalty",     label: "Penalties",    winColor: "text-navy" },
+  { key: "drop_goal",   label: "Drop Goals",   winColor: "text-navy" },
+  { key: "yellow_card", label: "Yellow Cards", winColor: "text-fair-play-gold" },
+  { key: "red_card",    label: "Red Cards",    winColor: "text-red-card" },
 ];
 
 function ScoringBreakdown({
@@ -403,41 +400,37 @@ function ScoringBreakdown({
   const awayShort = awayTeamName.slice(0, 3).toUpperCase();
 
   return (
-    <div className="border-2 border-white/15 rounded-sm overflow-hidden">
-      {/* Header with pitch-green accent */}
-      <div className="bg-pitch-green px-4 py-2.5 border-b border-pitch-green/70">
-        <p className="text-white text-[10px] font-extrabold tracking-widest uppercase">Scoring Breakdown</p>
+    <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy">
+      <div className="bg-pitch-green px-4 py-3 border-b-2 border-navy">
+        <p className="text-white font-[family-name:var(--font-lexend)] text-sm font-bold">Scoring Breakdown</p>
       </div>
 
       {/* Column labels */}
-      <div className="grid grid-cols-3 px-4 py-1.5 bg-white/[0.04] border-b border-white/[0.08] text-[10px] font-extrabold tracking-widest text-white/35 uppercase">
+      <div className="grid grid-cols-3 px-4 py-1.5 bg-muted/40 border-b border-border text-[10px] font-extrabold tracking-widest text-muted-foreground uppercase">
         <span>{homeShort}</span>
         <span className="text-center">EVENT</span>
         <span className="text-right">{awayShort}</span>
       </div>
 
-      {BREAKDOWN_ROWS.map(({ key, label, accent }) => {
+      {BREAKDOWN_ROWS.map(({ key, label, winColor }) => {
         const h = home[key];
         const a = away[key];
-        const hasData = h > 0 || a > 0;
         return (
           <div
             key={key}
-            className={`grid grid-cols-3 items-center px-4 py-2.5 border-b border-white/[0.05] last:border-0 ${
-              hasData ? "bg-white/[0.02]" : ""
-            }`}
+            className="grid grid-cols-3 items-center px-4 py-2.5 border-b border-border last:border-0"
           >
             <span
               className={`text-xl font-extrabold tabular-nums ${
-                h > a ? (accent ?? "text-white") : h === 0 ? "text-white/20" : "text-white/50"
+                h > a ? winColor : h === 0 ? "text-muted-foreground/40" : "text-foreground"
               }`}
             >
               {h}
             </span>
-            <span className="text-center text-[11px] font-bold text-white/40">{label}</span>
+            <span className="text-center text-[11px] font-bold text-muted-foreground">{label}</span>
             <span
               className={`text-xl font-extrabold tabular-nums text-right ${
-                a > h ? (accent ?? "text-white") : a === 0 ? "text-white/20" : "text-white/50"
+                a > h ? winColor : a === 0 ? "text-muted-foreground/40" : "text-foreground"
               }`}
             >
               {a}
@@ -467,12 +460,12 @@ function PerformanceStats({
   const awayShort = awayTeamName.slice(0, 3).toUpperCase();
 
   return (
-    <div className="border-2 border-white/15 rounded-sm overflow-hidden">
-      <div className="bg-navy/80 border-b-2 border-white/15 px-4 py-2.5">
-        <p className="text-[10px] font-extrabold tracking-widest text-white/60 uppercase">Performance Stats</p>
+    <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy">
+      <div className="bg-pitch-green px-4 py-3 border-b-2 border-navy">
+        <p className="text-white font-[family-name:var(--font-lexend)] text-sm font-bold">Performance Stats</p>
       </div>
 
-      <div className="grid grid-cols-3 px-4 py-1.5 bg-white/[0.04] border-b border-white/[0.08] text-[10px] font-extrabold tracking-widest text-white/35 uppercase">
+      <div className="grid grid-cols-3 px-4 py-1.5 bg-muted/40 border-b border-border text-[10px] font-extrabold tracking-widest text-muted-foreground uppercase">
         <span>{homeShort}</span>
         <span className="text-center">STAT</span>
         <span className="text-right">{awayShort}</span>
@@ -483,8 +476,8 @@ function PerformanceStats({
         if (visibleStats.length === 0) return null;
         return (
           <div key={group.label}>
-            <div className="px-4 py-1.5 bg-white/[0.03] border-b border-white/[0.05] border-t border-white/[0.05]">
-              <span className="text-[9px] font-extrabold tracking-widest text-white/25 uppercase">
+            <div className="px-4 py-1.5 bg-muted/50 border-b border-border border-t border-border">
+              <span className="text-[9px] font-extrabold tracking-widest text-muted-foreground uppercase">
                 {group.label}
               </span>
             </div>
@@ -499,22 +492,21 @@ function PerformanceStats({
               return (
                 <div
                   key={stat}
-                  className="grid grid-cols-3 items-center px-4 py-2 border-b border-white/[0.05] last:border-0"
+                  className="grid grid-cols-3 items-center px-4 py-2 border-b border-border last:border-0"
                 >
                   <span
                     className={`text-base font-extrabold tabular-nums ${
-                      home > away ? "text-pitch-green" : home === 0 ? "text-white/20" : "text-white/55"
+                      home > away ? "text-pitch-green" : home === 0 ? "text-muted-foreground/40" : "text-foreground"
                     }`}
                   >
                     {displayHome}
                   </span>
-                  {/* Full stat name for commentator context */}
-                  <span className="text-center text-[10px] text-white/40 leading-tight px-1">
+                  <span className="text-center text-[10px] text-muted-foreground leading-tight px-1">
                     {config?.full ?? stat}
                   </span>
                   <span
                     className={`text-base font-extrabold tabular-nums text-right ${
-                      away > home ? "text-pitch-green" : away === 0 ? "text-white/20" : "text-white/55"
+                      away > home ? "text-pitch-green" : away === 0 ? "text-muted-foreground/40" : "text-foreground"
                     }`}
                   >
                     {displayAway}
@@ -549,32 +541,30 @@ function PlayerSpotlight({
     scorerEntries.length > 0;
 
   return (
-    <div className="border-2 border-fair-play-gold/30 rounded-sm overflow-hidden">
-      <div className="bg-fair-play-gold/15 border-b-2 border-fair-play-gold/30 px-4 py-2.5 flex items-center gap-2">
+    <div className="bg-card border-2 border-border rounded-sm overflow-hidden shadow-brutalist-navy border-t-4 border-t-fair-play-gold">
+      <div className="bg-pitch-green px-4 py-3 border-b-2 border-navy flex items-center gap-2">
         <Star className="h-3.5 w-3.5 text-fair-play-gold" />
-        <p className="text-[10px] font-extrabold tracking-widest text-fair-play-gold uppercase">
-          Player Spotlight
-        </p>
+        <p className="text-white font-[family-name:var(--font-lexend)] text-sm font-bold">Player Spotlight</p>
       </div>
 
       {!hasContent ? (
         <div className="px-4 py-6 text-center">
-          <p className="text-sm text-white/25 italic">No events recorded yet</p>
+          <p className="text-sm text-muted-foreground italic">No events recorded yet</p>
         </div>
       ) : (
-        <div className="divide-y divide-white/[0.06]">
+        <div className="divide-y divide-border">
 
           {/* Top Scorer */}
           {topScorer && (
             <div className="p-4 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-sm bg-fair-play-gold/20 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-sm bg-fair-play-gold/20 border border-fair-play-gold/30 flex items-center justify-center shrink-0">
                 <Star className="h-4 w-4 text-fair-play-gold" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[9px] font-extrabold tracking-widest text-fair-play-gold/70 uppercase mb-0.5">
+                <p className="text-[9px] font-extrabold tracking-widest text-muted-foreground uppercase mb-0.5">
                   Top Scorer
                 </p>
-                <p className="text-base font-extrabold truncate">{topScorer.name}</p>
+                <p className="text-base font-extrabold truncate text-foreground">{topScorer.name}</p>
                 <p className="text-xs text-pitch-green font-bold mt-0.5">{topScorer.points} pts</p>
               </div>
             </div>
@@ -583,14 +573,14 @@ function PlayerSpotlight({
           {/* Top Try Scorer */}
           {topTryScorer && topTryScorer.playerId !== topScorer?.playerId && (
             <div className="p-4 flex items-start gap-3">
-              <div className="w-8 h-8 rounded-sm bg-pitch-green/15 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-sm bg-pitch-green/10 border border-pitch-green/20 flex items-center justify-center shrink-0">
                 <Zap className="h-4 w-4 text-pitch-green" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[9px] font-extrabold tracking-widest text-pitch-green/60 uppercase mb-0.5">
+                <p className="text-[9px] font-extrabold tracking-widest text-muted-foreground uppercase mb-0.5">
                   Top Try Scorer
                 </p>
-                <p className="text-base font-extrabold truncate">{topTryScorer.name}</p>
+                <p className="text-base font-extrabold truncate text-foreground">{topTryScorer.name}</p>
                 <p className="text-xs text-pitch-green font-bold mt-0.5">
                   {topTryScorer.tries} {topTryScorer.tries === 1 ? "try" : "tries"}
                 </p>
@@ -601,7 +591,7 @@ function PlayerSpotlight({
           {/* Cards */}
           {cardedPlayers.length > 0 && (
             <div className="p-4">
-              <p className="text-[9px] font-extrabold tracking-widest text-white/35 uppercase mb-2">
+              <p className="text-[9px] font-extrabold tracking-widest text-muted-foreground uppercase mb-2">
                 Cards Issued
               </p>
               <ul className="space-y-2">
@@ -612,9 +602,9 @@ function PlayerSpotlight({
                         c.cardType === "red_card" ? "bg-red-card" : "bg-fair-play-gold"
                       }`}
                     />
-                    <span className="font-semibold flex-1 truncate">{c.name}</span>
+                    <span className="font-semibold flex-1 truncate text-foreground">{c.name}</span>
                     {c.minute != null && (
-                      <span className="text-white/35 text-xs tabular-nums shrink-0">{c.minute}&apos;</span>
+                      <span className="text-muted-foreground text-xs tabular-nums shrink-0">{c.minute}&apos;</span>
                     )}
                   </li>
                 ))}
@@ -625,17 +615,17 @@ function PlayerSpotlight({
           {/* All Scorers */}
           {scorerEntries.length > 0 && (
             <div className="p-4">
-              <p className="text-[9px] font-extrabold tracking-widest text-white/35 uppercase mb-2">
+              <p className="text-[9px] font-extrabold tracking-widest text-muted-foreground uppercase mb-2">
                 All Scorers
               </p>
               <ul className="space-y-2">
                 {scorerEntries.map(([pid, stat], idx) => (
                   <li key={pid} className="flex items-center gap-2.5 text-sm">
-                    <span className="text-[10px] font-extrabold text-white/25 w-4 shrink-0 tabular-nums">
+                    <span className="text-[10px] font-extrabold text-muted-foreground/60 w-4 shrink-0 tabular-nums">
                       {idx + 1}.
                     </span>
-                    <span className="font-semibold flex-1 truncate">{stat.name}</span>
-                    <span className="text-white/45 text-[10px] shrink-0 ml-1 tabular-nums">
+                    <span className="font-semibold flex-1 truncate text-foreground">{stat.name}</span>
+                    <span className="text-muted-foreground text-[10px] shrink-0 ml-1 tabular-nums">
                       {[
                         stat.tries > 0 && `T×${stat.tries}`,
                         stat.conversions > 0 && `C×${stat.conversions}`,
