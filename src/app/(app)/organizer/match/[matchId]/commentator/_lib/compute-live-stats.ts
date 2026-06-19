@@ -1,4 +1,10 @@
-import { POINTS } from "@modules/match";
+// Inlined to keep this file browser-safe — @modules/match re-exports Prisma service code
+const POINTS: Partial<Record<string, number>> = {
+  try: 5,
+  conversion: 2,
+  penalty: 3,
+  drop_goal: 3,
+};
 
 const CARD_EVENTS = new Set(["yellow_card", "red_card"]);
 
