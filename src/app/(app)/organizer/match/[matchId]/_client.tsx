@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
+import type { Route } from "next";
 import {
   ArrowLeft, Zap, Clock, MapPin, User,
   RotateCcw, Lock, AlertTriangle, Play,
@@ -16,11 +17,16 @@ import type { getMatchWithRoster } from "@modules/match";
 
 type EventType = "try" | "conversion" | "penalty" | "drop_goal" | "yellow_card" | "red_card";
 type StatType =
-  | "tackles_dom" | "tackles_passive" | "tackles_miss"
-  | "line_breaks" | "ball_carries" | "offloads"
-  | "handling_errors" | "rucks_secured" | "turnovers_won"
-  | "scrums_won" | "scrums_lost" | "lineouts_won"
-  | "lineouts_lost" | "penalties_conceded";
+  | "kicks_from_hand" | "passes" | "runs" | "metres_run"
+  | "possession_phase" | "territory_phase"
+  | "clean_breaks" | "defenders_beaten" | "offloads"
+  | "rucks_won" | "rucks_lost" | "mauls_won" | "mauls_lost"
+  | "turnovers_conceded"
+  | "tackles_made" | "tackles_missed"
+  | "scrums_own_feed_won" | "scrums_own_feed_lost"
+  | "lineouts_own_throw_won" | "lineouts_own_throw_lost"
+  | "penalties_conceded"
+  | "forward_pass" | "knock_on";
 type MatchPhase = "pre_match" | "first_half" | "halftime" | "second_half" | "completed" | "suspended" | "locked";
 
 interface MatchEvent {
@@ -238,6 +244,7 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
   const [showSuspendDialog, setShowSuspendDialog] = useState(false);
   const [showLockDialog, setShowLockDialog] = useState(false);
   const [mobileTab, setMobileTab] = useState<"home" | "away">("home");
+  const [statsTeam, setStatsTeam] = useState<"home" | "away">("home");
   const [prePhase, setPrePhase] = useState<MatchPhase | null>(null);
 
   const isLocked = phase === "locked";
@@ -246,11 +253,15 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
 
   type StatsMap = Record<StatType, number>;
   const EMPTY_STATS: StatsMap = {
-    tackles_dom: 0, tackles_passive: 0, tackles_miss: 0,
-    line_breaks: 0, ball_carries: 0, offloads: 0,
-    handling_errors: 0, rucks_secured: 0, turnovers_won: 0,
-    scrums_won: 0, scrums_lost: 0, lineouts_won: 0,
-    lineouts_lost: 0, penalties_conceded: 0,
+    kicks_from_hand: 0, passes: 0, runs: 0, metres_run: 0,
+    possession_phase: 0, territory_phase: 0,
+    clean_breaks: 0, defenders_beaten: 0, offloads: 0,
+    rucks_won: 0, rucks_lost: 0, mauls_won: 0, mauls_lost: 0,
+    turnovers_conceded: 0,
+    tackles_made: 0, tackles_missed: 0,
+    scrums_own_feed_won: 0, scrums_own_feed_lost: 0,
+    lineouts_own_throw_won: 0, lineouts_own_throw_lost: 0,
+    penalties_conceded: 0, forward_pass: 0, knock_on: 0,
   };
 
   function buildInitialStats(side: "home" | "away"): StatsMap {
@@ -258,7 +269,13 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
     const counts = { ...EMPTY_STATS };
     for (const e of match.events) {
       if (e.teamId === teamId && e.eventType in counts) {
-        counts[e.eventType as StatType] += 1;
+        const stat = e.eventType as StatType;
+        if (stat === "metres_run") {
+          const p = e.payload as { value?: number } | null;
+          counts[stat] += p?.value ?? 1;
+        } else {
+          counts[stat] += 1;
+        }
       }
     }
     return counts;
@@ -267,17 +284,40 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
   const [homeStats, setHomeStats] = useState<StatsMap>(() => buildInitialStats("home"));
   const [awayStats, setAwayStats] = useState<StatsMap>(() => buildInitialStats("away"));
 
-  const incrementStat = (team: "home" | "away", stat: StatType) => {
+  const currentHalf = (phase === "first_half" || phase === "halftime") ? 1 : 2;
+
+  const incrementStat = (
+    team: "home" | "away",
+    stat: StatType,
+    delta = 1,
+    extraPayload?: Record<string, unknown>,
+  ) => {
     if (!canScore) return;
-    if (team === "home") setHomeStats(s => ({ ...s, [stat]: s[stat] + 1 }));
-    else setAwayStats(s => ({ ...s, [stat]: s[stat] + 1 }));
+    if (team === "home") setHomeStats(s => ({ ...s, [stat]: (s[stat] ?? 0) + delta }));
+    else setAwayStats(s => ({ ...s, [stat]: (s[stat] ?? 0) + delta }));
 
     const teamId = team === "home" ? match.homeTeam.id : match.awayTeam.id;
+    const payload: Record<string, unknown> = { ...extraPayload };
+    if (delta !== 1) payload.value = delta;
+    const body: Record<string, unknown> = { teamId, eventType: stat, minute };
+    if (Object.keys(payload).length > 0) body.payload = payload;
+
     fetch(`/api/organizer/match/${matchId}/event`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ teamId, eventType: stat, minute }),
+      body: JSON.stringify(body),
+    }).then(async res => {
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({})) as { error?: string };
+        if (team === "home") setHomeStats(s => ({ ...s, [stat]: (s[stat] ?? delta) - delta }));
+        else setAwayStats(s => ({ ...s, [stat]: (s[stat] ?? delta) - delta }));
+        toast.error(errData.error ?? "Failed to record stat");
+      }
     }).catch(err => { console.error("[MatchCenter] stat POST failed:", err); });
+  };
+
+  const incrementPossession = (team: "home" | "away", stat: "possession_phase" | "territory_phase") => {
+    incrementStat(team, stat, 1, { half: currentHalf });
   };
 
   const clearUndo = useCallback(() => {
@@ -494,27 +534,64 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
 
   const StatsPanel = ({ side }: { side: "home" | "away" }) => {
     const stats = side === "home" ? homeStats : awayStats;
-    const label = side === "home" ? homeShort : awayShort;
     return (
-      <div className="flex flex-col gap-3">
-        <p className="text-center text-muted-foreground text-[11px] font-bold uppercase tracking-[0.06em]">
-          {label} — Stats
-        </p>
+      <div className="flex flex-col gap-4">
         {STAT_GROUPS.map(group => (
           <div key={group.label}>
-            <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider mb-1.5">
+            <p className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-wider mb-2">
               {group.label}
             </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {group.stats.map(stat => (
-                <StatButton
-                  key={stat}
-                  label={STAT_CONFIG[stat].label}
-                  count={stats[stat]}
-                  disabled={!canScore}
-                  onClick={() => incrementStat(side, stat)}
-                />
-              ))}
+            <div className="grid grid-cols-2 gap-2">
+              {group.stats.map(stat => {
+                if (stat === "metres_run") {
+                  return (
+                    <div key={stat} className="col-span-2 border-2 border-border rounded-sm overflow-hidden"
+                      style={{ boxShadow: canScore ? "2px 2px 0 var(--navy)" : "none" }}>
+                      <div className="flex items-center justify-between px-3 py-2 bg-muted/20">
+                        <span className="text-[12px] font-medium text-foreground">Metres Run</span>
+                        <span className="font-[family-name:var(--font-lexend)] text-sm font-black text-foreground">
+                          {stats.metres_run}m
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 divide-x-2 divide-border border-t-2 border-border">
+                        {([5, 10] as const).map(delta => (
+                          <button key={delta} disabled={!canScore}
+                            onClick={() => incrementStat(side, "metres_run", delta)}
+                            className={`py-2.5 text-[13px] font-bold transition-colors ${
+                              !canScore
+                                ? "bg-card text-muted-foreground/40 cursor-not-allowed"
+                                : "bg-card hover:bg-muted text-foreground active:translate-x-[1px] active:translate-y-[1px]"
+                            }`}>
+                            +{delta}m
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                const isPossession = stat === "possession_phase" || stat === "territory_phase";
+                const label = isPossession
+                  ? `${STAT_CONFIG[stat].full} H${currentHalf}`
+                  : STAT_CONFIG[stat].full;
+                return (
+                  <button key={stat} disabled={!canScore}
+                    onClick={() => isPossession
+                      ? incrementPossession(side, stat)
+                      : incrementStat(side, stat)
+                    }
+                    className={`flex flex-col items-start justify-between p-3 h-[72px] border-2 rounded-sm text-left transition-all active:translate-x-[1px] active:translate-y-[1px] ${
+                      !canScore
+                        ? "border-border opacity-40 cursor-not-allowed bg-card"
+                        : "border-border hover:border-navy bg-card"
+                    }`}
+                    style={{ boxShadow: !canScore ? "none" : "2px 2px 0 var(--navy)" }}>
+                    <span className="text-[11px] font-medium text-muted-foreground leading-tight">{label}</span>
+                    <span className="font-[family-name:var(--font-lexend)] text-xl font-black text-foreground tabular-nums">
+                      {stats[stat]}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -546,6 +623,15 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
             {homeName} vs {awayName}
           </p>
         </div>
+        <Link
+          href={`/organizer/match/${match.id}/commentator` as Route}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold tracking-wide bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white flex-shrink-0"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Zap className="h-3.5 w-3.5" />
+          COMMENTATOR VIEW
+        </Link>
         <span className={`px-2.5 py-1 rounded-sm border-2 flex-shrink-0 text-xs font-bold ${phase === "locked" ? "border-muted bg-muted text-muted-foreground" : phase === "suspended" ? "border-red-card bg-red-card/20 text-white" : phase === "first_half" || phase === "second_half" ? "border-fair-play-gold bg-fair-play-gold/20 text-fair-play-gold animate-pulse" : "border-white/30 bg-white/10 text-white/80"}`}>
           {PHASE_LABELS[phase]}
         </span>
@@ -630,14 +716,19 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
           <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground mb-3">
             Performance Stats
           </p>
-          <div className="sm:hidden">
-            <StatsPanel side={mobileTab} />
+          <div className="grid grid-cols-2 border-2 border-border rounded-sm overflow-hidden mb-4">
+            {(["home", "away"] as const).map(side => (
+              <button key={side} onClick={() => setStatsTeam(side)}
+                className={`py-2.5 text-[13px] font-bold transition-colors ${
+                  statsTeam === side
+                    ? "bg-navy text-white"
+                    : "bg-card text-foreground hover:bg-muted"
+                }`}>
+                {side === "home" ? homeName : awayName}
+              </button>
+            ))}
           </div>
-          <div className="hidden sm:grid grid-cols-[1fr_auto_1fr] gap-4">
-            <StatsPanel side="home" />
-            <div className="w-px bg-border self-stretch" />
-            <StatsPanel side="away" />
-          </div>
+          <StatsPanel side={statsTeam} />
         </div>
 
         {/* Phase controls */}
