@@ -102,9 +102,13 @@ export function CommentatorClient({ match }: { match: Match }) {
 
   const isLive = status === "live";
 
-  const scorerEntries = [...stats.playerPoints.entries()]
-    .filter(([, s]) => s.points > 0)
-    .sort(([, a], [, b]) => b.points - a.points);
+  const scorerEntries = useMemo(
+    () =>
+      [...stats.playerPoints.entries()]
+        .filter(([, s]) => s.points > 0)
+        .sort(([, a], [, b]) => b.points - a.points),
+    [stats]
+  );
 
   return (
     <div className="min-h-screen bg-navy text-white font-[family-name:var(--font-lexend)]">
@@ -249,8 +253,8 @@ function LineupPanel({
   topScorer: LiveStats["topScorer"];
   topTryScorer: LiveStats["topTryScorer"];
 }) {
-  const cardedIds = new Set(
-    cardedPlayers.filter((c) => c.team === side).map((c) => c.playerId)
+  const cardedMap = new Map(
+    cardedPlayers.filter((c) => c.team === side).map((c) => [c.playerId, c])
   );
 
   return (
@@ -263,11 +267,11 @@ function LineupPanel({
       <ul className="divide-y divide-white/5">
         {team.players.map((player) => {
           const stat = playerPoints.get(player.id);
-          const carded = cardedIds.has(player.id);
+          const cardedEntry = cardedMap.get(player.id);
+          const carded = cardedEntry !== undefined;
           const isTopScorer = topScorer?.playerId === player.id;
           const isTopTry = topTryScorer?.playerId === player.id;
-          const redCarded = carded &&
-            cardedPlayers.find((c) => c.playerId === player.id)?.cardType === "red_card";
+          const redCarded = cardedEntry?.cardType === "red_card";
 
           return (
             <li
