@@ -33,6 +33,7 @@ export interface StatEvent {
   id: string;
   isHome: boolean;
   statType: keyof typeof STAT_CONFIG;
+  payload?: Record<string, unknown> | null;
 }
 
 export interface MatchReportProps {
@@ -259,30 +260,160 @@ export function MatchReportClient({
               <div className="p-4 flex flex-col gap-4">
                 <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 px-1 mb-1">
                   <span />
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-14 text-center">{homeShort}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-14 text-center">{awayShort}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-20 text-center">{homeShort}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground w-20 text-center">{awayShort}</span>
                 </div>
-                {STAT_GROUPS.map(sg => (
-                  <div key={sg.label}>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2 px-1">{sg.label}</p>
-                    <div className="border-2 border-border rounded-sm overflow-hidden">
-                      {sg.stats.map((stat, idx) => {
-                        const h = statEvents.filter(e => e.isHome && e.statType === stat).length;
-                        const a = statEvents.filter(e => !e.isHome && e.statType === stat).length;
-                        const hWins = h > a;
-                        const aWins = a > h;
-                        return (
-                          <div key={stat}
-                            className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${idx % 2 === 0 ? "bg-muted/20" : ""}`}>
-                            <span className="text-[12px] text-foreground font-medium">{STAT_CONFIG[stat].full}</span>
-                            <span className={`w-14 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${hWins ? "text-pitch-green" : "text-foreground"}`}>{h}</span>
-                            <span className={`w-14 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${aWins ? "text-pitch-green" : "text-foreground"}`}>{a}</span>
-                          </div>
-                        );
-                      })}
+                {STAT_GROUPS.map(sg => {
+                  const rendered = new Set<string>();
+                  const rows: React.ReactNode[] = [];
+                  let rowIdx = 0;
+
+                  for (const stat of sg.stats) {
+                    if (rendered.has(stat)) continue;
+                    const cfg = STAT_CONFIG[stat];
+                    const bg = rowIdx % 2 === 0 ? "bg-muted/20" : "";
+                    rowIdx++;
+
+                    if (cfg.displayMode === "pair" && cfg.pairWith) {
+                      const pairStat = cfg.pairWith;
+                      rendered.add(stat);
+                      rendered.add(pairStat);
+
+                      const hWon = statEvents.filter(e => e.isHome && e.statType === stat).length;
+                      const hLost = statEvents.filter(e => e.isHome && e.statType === pairStat).length;
+                      const hTotal = hWon + hLost;
+                      const hPct = hTotal > 0 ? Math.round((hWon / hTotal) * 100) : 0;
+
+                      const aWon = statEvents.filter(e => !e.isHome && e.statType === stat).length;
+                      const aLost = statEvents.filter(e => !e.isHome && e.statType === pairStat).length;
+                      const aTotal = aWon + aLost;
+                      const aPct = aTotal > 0 ? Math.round((aWon / aTotal) * 100) : 0;
+
+                      const hWins = hPct > aPct;
+                      const aWins = aPct > hPct;
+                      // label: e.g. "Rucks Won" strip " Won" suffix to get "Rucks"
+                      const rowLabel = cfg.full.replace(/ Won.*$/, "").replace(/ \(.*\)$/, "");
+                      rows.push(
+                        <div key={stat} className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${bg}`}>
+                          <span className="text-[12px] text-foreground font-medium">{rowLabel}</span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-[11px] font-extrabold ${hWins ? "text-pitch-green" : "text-foreground"}`}>
+                            {hTotal > 0 ? `${hWon} / ${hTotal} (${hPct}%)` : "—"}
+                          </span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-[11px] font-extrabold ${aWins ? "text-pitch-green" : "text-foreground"}`}>
+                            {aTotal > 0 ? `${aWon} / ${aTotal} (${aPct}%)` : "—"}
+                          </span>
+                        </div>
+                      );
+                    } else if (cfg.displayMode === "ratio" && cfg.pairWith) {
+                      const pairStat = cfg.pairWith;
+                      rendered.add(stat);
+                      rendered.add(pairStat);
+
+                      const hMade = statEvents.filter(e => e.isHome && e.statType === stat).length;
+                      const hMiss = statEvents.filter(e => e.isHome && e.statType === pairStat).length;
+                      const hRate = hMade + hMiss > 0 ? Math.round((hMade / (hMade + hMiss)) * 100) : 0;
+
+                      const aMade = statEvents.filter(e => !e.isHome && e.statType === stat).length;
+                      const aMiss = statEvents.filter(e => !e.isHome && e.statType === pairStat).length;
+                      const aRate = aMade + aMiss > 0 ? Math.round((aMade / (aMade + aMiss)) * 100) : 0;
+
+                      const ratioLabel = cfg.full.replace(/ Made$/, "").replace(/ \(.*\)$/, "");
+                      rows.push(
+                        <div key={stat} className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${bg}`}>
+                          <span className="text-[12px] text-foreground font-medium">{ratioLabel} Made / Missed</span>
+                          <span className="w-20 text-center font-[family-name:var(--font-lexend)] text-[11px] font-extrabold text-foreground">
+                            {hMade} / {hMiss}
+                          </span>
+                          <span className="w-20 text-center font-[family-name:var(--font-lexend)] text-[11px] font-extrabold text-foreground">
+                            {aMade} / {aMiss}
+                          </span>
+                        </div>
+                      );
+                      rowIdx++;
+                      const bg2 = rowIdx % 2 === 0 ? "bg-muted/20" : "";
+                      rows.push(
+                        <div key={`${stat}_rate`} className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${bg2}`}>
+                          <span className="text-[12px] text-muted-foreground font-medium pl-3">↳ Success Rate</span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-[11px] font-extrabold ${hRate >= aRate ? "text-pitch-green" : "text-foreground"}`}>
+                            {hMade + hMiss > 0 ? `${hRate}%` : "—"}
+                          </span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-[11px] font-extrabold ${aRate > hRate ? "text-pitch-green" : "text-foreground"}`}>
+                            {aMade + aMiss > 0 ? `${aRate}%` : "—"}
+                          </span>
+                        </div>
+                      );
+                    } else if (cfg.displayMode === "possession") {
+                      rendered.add(stat);
+
+                      const hH1 = statEvents.filter(e => e.isHome && e.statType === stat && (e.payload?.half as number | undefined) === 1).length;
+                      const hH2 = statEvents.filter(e => e.isHome && e.statType === stat && (e.payload?.half as number | undefined) === 2).length;
+                      const aH1 = statEvents.filter(e => !e.isHome && e.statType === stat && (e.payload?.half as number | undefined) === 1).length;
+                      const aH2 = statEvents.filter(e => !e.isHome && e.statType === stat && (e.payload?.half as number | undefined) === 2).length;
+
+                      const totalH1 = hH1 + aH1;
+                      const totalH2 = hH2 + aH2;
+                      const total = hH1 + hH2 + aH1 + aH2;
+
+                      const hPct    = total   > 0 ? Math.round(((hH1 + hH2) / total)   * 100) : 0;
+                      const hH1Pct  = totalH1 > 0 ? Math.round((hH1 / totalH1) * 100) : 0;
+                      const hH2Pct  = totalH2 > 0 ? Math.round((hH2 / totalH2) * 100) : 0;
+                      const aPct    = total   > 0 ? Math.round(((aH1 + aH2) / total)   * 100) : 0;
+                      const aH1Pct  = totalH1 > 0 ? Math.round((aH1 / totalH1) * 100) : 0;
+                      const aH2Pct  = totalH2 > 0 ? Math.round((aH2 / totalH2) * 100) : 0;
+
+                      const hWins = hPct > aPct;
+                      const aWins = aPct > hPct;
+                      rows.push(
+                        <div key={stat} className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${bg}`}>
+                          <span className="text-[12px] text-foreground font-medium">{cfg.full} (1H/2H)</span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-[11px] font-extrabold ${hWins ? "text-pitch-green" : "text-foreground"}`}>
+                            {total > 0 ? `${hPct}% (${hH1Pct}/${hH2Pct})` : "—"}
+                          </span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-[11px] font-extrabold ${aWins ? "text-pitch-green" : "text-foreground"}`}>
+                            {total > 0 ? `${aPct}% (${aH1Pct}/${aH2Pct})` : "—"}
+                          </span>
+                        </div>
+                      );
+                    } else if (cfg.displayMode === "metres") {
+                      rendered.add(stat);
+
+                      const hM = statEvents.filter(e => e.isHome && e.statType === stat)
+                        .reduce((acc, e) => acc + ((e.payload?.value as number | undefined) ?? 1), 0);
+                      const aM = statEvents.filter(e => !e.isHome && e.statType === stat)
+                        .reduce((acc, e) => acc + ((e.payload?.value as number | undefined) ?? 1), 0);
+                      const hWins = hM > aM;
+                      const aWins = aM > hM;
+                      rows.push(
+                        <div key={stat} className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${bg}`}>
+                          <span className="text-[12px] text-foreground font-medium">{cfg.full}</span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${hWins ? "text-pitch-green" : "text-foreground"}`}>{hM}m</span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${aWins ? "text-pitch-green" : "text-foreground"}`}>{aM}m</span>
+                        </div>
+                      );
+                    } else {
+                      rendered.add(stat);
+                      const h = statEvents.filter(e => e.isHome && e.statType === stat).length;
+                      const a = statEvents.filter(e => !e.isHome && e.statType === stat).length;
+                      const hWins = h > a;
+                      const aWins = a > h;
+                      rows.push(
+                        <div key={stat} className={`grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-3 py-2 ${bg}`}>
+                          <span className="text-[12px] text-foreground font-medium">{cfg.full}</span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${hWins ? "text-pitch-green" : "text-foreground"}`}>{h}</span>
+                          <span className={`w-20 text-center font-[family-name:var(--font-lexend)] text-sm font-extrabold ${aWins ? "text-pitch-green" : "text-foreground"}`}>{a}</span>
+                        </div>
+                      );
+                    }
+                  }
+
+                  if (rows.length === 0) return null;
+                  return (
+                    <div key={sg.label}>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50 mb-2 px-1">{sg.label}</p>
+                      <div className="border-2 border-border rounded-sm overflow-hidden">{rows}</div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

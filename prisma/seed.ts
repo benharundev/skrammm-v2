@@ -34,7 +34,7 @@ function lid(n: number) {
 
 const IDs = {
   users: {
-    organizer: "01970000-0000-7000-8000-000000000001",
+    organizer: "01970000-0000-7000-8000-000000000001" as string,
     tm:        "01970000-0000-7000-8000-000000000002",
     player:    "01970000-0000-7000-8000-000000000003",
   },
@@ -243,11 +243,15 @@ async function main() {
   console.log("Seeding Piala Agong 2026...");
 
   // 1. Users
-  await prisma.user.upsert({
-    where:  { id: IDs.users.organizer },
-    update: { email: "adibhaziqalias@gmail.com" },
-    create: { id: IDs.users.organizer, email: "adibhaziqalias@gmail.com", name: "Dev Organizer", emailVerified: true },
-  });
+  // Organizer: upsert by email (the account may have been created via OTP with a different UUID)
+  const existingOrganizer = await prisma.user.findUnique({ where: { email: "adibhaziqalias@gmail.com" } });
+  if (existingOrganizer) {
+    IDs.users.organizer = existingOrganizer.id;
+  } else {
+    await prisma.user.create({
+      data: { id: IDs.users.organizer, email: "adibhaziqalias@gmail.com", name: "Dev Organizer", emailVerified: true },
+    });
+  }
   await prisma.user.upsert({
     where:  { id: IDs.users.tm },
     update: {},
@@ -295,7 +299,7 @@ async function main() {
   // 4. Tournament
   await prisma.tournament.upsert({
     where:  { id: IDs.tournament },
-    update: {},
+    update: { organizerUserId: IDs.users.organizer },
     create: {
       id:              IDs.tournament,
       code:            "pialagong26",

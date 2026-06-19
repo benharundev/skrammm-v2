@@ -264,6 +264,7 @@ export async function getMatchesPublic(tournamentId: string): Promise<PublicMatc
           eventType: true,
           teamId: true,
           minute: true,
+          payload: true,
           player: { select: { fullName: true } },
         },
       },
@@ -276,6 +277,7 @@ export async function getMatchesPublic(tournamentId: string): Promise<PublicMatc
     events: r.events.map((e) => ({
       ...e,
       minute: e.minute ?? 0,
+      payload: e.payload as Record<string, unknown> | null,
     })),
   }));
 }
@@ -302,6 +304,7 @@ export async function getMatchPublicById(matchId: string): Promise<PublicMatch |
           eventType: true,
           teamId: true,
           minute: true,
+          payload: true,
           player: { select: { fullName: true } },
         },
       },
@@ -316,6 +319,7 @@ export async function getMatchPublicById(matchId: string): Promise<PublicMatch |
     events: row.events.map((e) => ({
       ...e,
       minute: e.minute ?? 0,
+      payload: e.payload as Record<string, unknown> | null,
     })),
   };
 }
@@ -488,7 +492,7 @@ export async function getMatchWithRoster(matchId: string) {
       events: {
         where: { deletedAt: null },
         orderBy: { createdAt: "asc" },
-        select: { id: true, eventType: true, teamId: true, playerId: true, minute: true, createdAt: true },
+        select: { id: true, eventType: true, teamId: true, playerId: true, minute: true, createdAt: true, payload: true },
       },
       tournament: { select: { id: true, name: true, organizerUserId: true } },
     },

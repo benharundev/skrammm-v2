@@ -39,6 +39,7 @@ export default async function MatchReportPage({
       id: e.id,
       isHome: e.teamId === match.homeTeam.id,
       statType: e.eventType as keyof typeof STAT_CONFIG,
+      payload: e.payload as Record<string, unknown> | null,
     }));
 
   return (

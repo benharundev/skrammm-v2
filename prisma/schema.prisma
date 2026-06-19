@@ -397,20 +397,34 @@ enum MatchEventType {
   sub_in
   sub_out
   // Performance stats — each increment is one event with 0 points
-  tackles_dom
-  tackles_passive
-  tackles_miss
-  line_breaks
-  ball_carries
+  // Kick / Pass / Run
+  kicks_from_hand
+  passes
+  runs
+  metres_run
+  // Attacking
+  possession_phase
+  territory_phase
+  clean_breaks
+  defenders_beaten
   offloads
-  handling_errors
-  rucks_secured
-  turnovers_won
-  scrums_won
-  scrums_lost
-  lineouts_won
-  lineouts_lost
+  rucks_won
+  rucks_lost
+  mauls_won
+  mauls_lost
+  turnovers_conceded
+  // Defensive
+  tackles_made
+  tackles_missed
+  // Set Pieces
+  scrums_own_feed_won
+  scrums_own_feed_lost
+  lineouts_own_throw_won
+  lineouts_own_throw_lost
+  // Discipline
   penalties_conceded
+  forward_pass
+  knock_on
 }
 
 model MatchEvent {

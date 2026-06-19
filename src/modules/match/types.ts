@@ -4,11 +4,22 @@ export const MatchEventTypeSchema = z.enum([
   "try", "conversion", "penalty", "drop_goal",
   "yellow_card", "red_card", "sub_in", "sub_out",
   // Performance stats — persisted as zero-point events
-  "tackles_dom", "tackles_passive", "tackles_miss",
-  "line_breaks", "ball_carries", "offloads",
-  "handling_errors", "rucks_secured", "turnovers_won",
-  "scrums_won", "scrums_lost", "lineouts_won",
-  "lineouts_lost", "penalties_conceded",
+  // Kick / Pass / Run
+  "kicks_from_hand", "passes", "runs", "metres_run",
+  // Attacking
+  "possession_phase", "territory_phase",
+  "clean_breaks", "defenders_beaten", "offloads",
+  "rucks_won", "rucks_lost", "mauls_won", "mauls_lost",
+  "turnovers_conceded",
+  // Defensive
+  "tackles_made", "tackles_missed",
+  // Set Pieces
+  "scrums_own_feed_won", "scrums_own_feed_lost",
+  "lineouts_own_throw_won", "lineouts_own_throw_lost",
+  // Discipline
+  "penalties_conceded",
+  "forward_pass",
+  "knock_on",
 ]);
 
 export const AddMatchEventSchema = z.object({
@@ -53,6 +64,7 @@ export type PublicMatchEvent = {
   teamId: string;
   minute: number;
   player: { fullName: string } | null;
+  payload: Record<string, unknown> | null;
 };
 
 export type PublicMatch = {

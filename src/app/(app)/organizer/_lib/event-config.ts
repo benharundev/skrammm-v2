@@ -5,13 +5,23 @@ type EventType = Extract<
   "try" | "conversion" | "penalty" | "drop_goal" | "yellow_card" | "red_card"
 >;
 
-type StatType =
-  | "tackles_dom" | "tackles_passive" | "tackles_miss"
-  | "line_breaks" | "ball_carries" | "offloads"
-  | "handling_errors" | "rucks_secured" | "turnovers_won"
-  | "scrums_won" | "scrums_lost"
-  | "lineouts_won" | "lineouts_lost"
-  | "penalties_conceded";
+export type StatType =
+  // Kick / Pass / Run
+  | "kicks_from_hand" | "passes" | "runs" | "metres_run"
+  // Attacking
+  | "possession_phase" | "territory_phase"
+  | "clean_breaks" | "defenders_beaten" | "offloads"
+  | "rucks_won" | "rucks_lost" | "mauls_won" | "mauls_lost"
+  | "turnovers_conceded"
+  // Defensive
+  | "tackles_made" | "tackles_missed"
+  // Set Pieces
+  | "scrums_own_feed_won" | "scrums_own_feed_lost"
+  | "lineouts_own_throw_won" | "lineouts_own_throw_lost"
+  // Discipline
+  | "penalties_conceded"
+  | "forward_pass"
+  | "knock_on";
 
 interface EventConfig {
   label: string;
@@ -28,36 +38,79 @@ export const EVENT_CONFIG: Record<EventType, EventConfig> = {
   red_card:    { label: "RC",   points: 0, colorClass: "bg-red-card text-white" },
 };
 
-interface StatConfig { label: string; full: string }
+// "pair"        → "X from Y (Z%)"   e.g. rucks_won paired with rucks_lost
+// "ratio"       → "X / Y" + derived success rate row  e.g. tackles_made / tackles_missed
+// "possession"  → "X% (H1: X% / H2: X%)" derived from payload.half counts
+// "metres"      → sum payload.value, display as "Xm"
+// undefined     → simple count
+export type DisplayMode = "pair" | "ratio" | "possession" | "metres";
+
+export interface StatConfig {
+  label: string;
+  full: string;
+  displayMode?: DisplayMode;
+  pairWith?: StatType;
+}
 
 export const STAT_CONFIG: Record<StatType, StatConfig> = {
-  tackles_dom:        { label: "DOM",    full: "Tackles – Dominant" },
-  tackles_passive:    { label: "PAS",    full: "Tackles – Passive" },
-  tackles_miss:       { label: "MISS",   full: "Missed Tackles" },
-  line_breaks:        { label: "LB",     full: "Line Breaks" },
-  ball_carries:       { label: "CARRY",  full: "Ball Carries" },
-  offloads:           { label: "OFFLD",  full: "Offloads" },
-  handling_errors:    { label: "KNOCK",  full: "Handling Errors" },
-  rucks_secured:      { label: "RUCK",   full: "Rucks Secured" },
-  turnovers_won:      { label: "TOVER",  full: "Turnovers Won" },
-  scrums_won:         { label: "SCR W",  full: "Scrums Won" },
-  scrums_lost:        { label: "SCR L",  full: "Scrums Lost/Pen" },
-  lineouts_won:       { label: "LO W",   full: "Lineouts Won" },
-  lineouts_lost:      { label: "LO L",   full: "Lineouts Lost" },
-  penalties_conceded: { label: "PEN",    full: "Penalties Conceded" },
+  // Kick / Pass / Run
+  kicks_from_hand:          { label: "KICKS",  full: "Kicks from Hand" },
+  passes:                   { label: "PASS",   full: "Passes" },
+  runs:                     { label: "RUNS",   full: "Runs" },
+  metres_run:               { label: "MTR",    full: "Metres Run with Ball", displayMode: "metres" },
+  // Attacking
+  possession_phase:         { label: "POSS",   full: "Possession", displayMode: "possession" },
+  territory_phase:          { label: "TERR",   full: "Territory", displayMode: "possession" },
+  clean_breaks:             { label: "CB",     full: "Clean Breaks" },
+  defenders_beaten:         { label: "DEF B",  full: "Defenders Beaten" },
+  offloads:                 { label: "OFFLD",  full: "Offloads" },
+  rucks_won:                { label: "RK W",   full: "Rucks Won", displayMode: "pair", pairWith: "rucks_lost" },
+  rucks_lost:               { label: "RK L",   full: "Rucks Lost" },
+  mauls_won:                { label: "ML W",   full: "Mauls Won", displayMode: "pair", pairWith: "mauls_lost" },
+  mauls_lost:               { label: "ML L",   full: "Mauls Lost" },
+  turnovers_conceded:       { label: "TOVER",  full: "Turnovers Conceded" },
+  // Defensive
+  tackles_made:             { label: "TKL",    full: "Tackles Made", displayMode: "ratio", pairWith: "tackles_missed" },
+  tackles_missed:           { label: "MISS",   full: "Tackles Missed" },
+  // Set Pieces
+  scrums_own_feed_won:      { label: "SC W",   full: "Scrums Won (Own Feed)", displayMode: "pair", pairWith: "scrums_own_feed_lost" },
+  scrums_own_feed_lost:     { label: "SC L",   full: "Scrums Lost (Own Feed)" },
+  lineouts_own_throw_won:   { label: "LO W",   full: "Lineouts Won (Own Throw)", displayMode: "pair", pairWith: "lineouts_own_throw_lost" },
+  lineouts_own_throw_lost:  { label: "LO L",   full: "Lineouts Lost (Own Throw)" },
+  // Discipline
+  penalties_conceded:       { label: "PEN",    full: "Penalties Conceded" },
+  forward_pass:             { label: "FWD",    full: "Forward Pass" },
+  knock_on:                 { label: "K/O",    full: "Knock On" },
 };
 
 export const STAT_GROUPS: { label: string; stats: StatType[] }[] = [
   {
-    label: "Defence",
-    stats: ["tackles_dom", "tackles_passive", "tackles_miss", "turnovers_won"],
+    label: "Kick / Pass / Run",
+    stats: ["kicks_from_hand", "passes", "runs", "metres_run"],
   },
   {
-    label: "Attack",
-    stats: ["line_breaks", "ball_carries", "offloads", "handling_errors", "rucks_secured"],
+    label: "Attacking",
+    stats: [
+      "possession_phase", "territory_phase",
+      "clean_breaks", "defenders_beaten", "offloads",
+      "rucks_won", "rucks_lost",
+      "mauls_won", "mauls_lost",
+      "turnovers_conceded",
+    ],
+  },
+  {
+    label: "Defensive",
+    stats: ["tackles_made", "tackles_missed"],
   },
   {
     label: "Set Pieces",
-    stats: ["scrums_won", "scrums_lost", "lineouts_won", "lineouts_lost", "penalties_conceded"],
+    stats: [
+      "scrums_own_feed_won", "scrums_own_feed_lost",
+      "lineouts_own_throw_won", "lineouts_own_throw_lost",
+    ],
+  },
+  {
+    label: "Discipline",
+    stats: ["penalties_conceded", "forward_pass", "knock_on"],
   },
 ];
