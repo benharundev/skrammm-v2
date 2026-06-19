@@ -122,25 +122,6 @@ function CardButton({
   );
 }
 
-function StatButton({
-  label, count, disabled, onClick,
-}: { label: string; count: number; disabled?: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      className={`flex flex-col items-center justify-center gap-0.5 h-14 border-2 rounded-sm transition-all active:translate-x-[2px] active:translate-y-[2px] ${
-        disabled
-          ? "border-border opacity-40 cursor-not-allowed bg-card"
-          : "border-border hover:border-navy bg-card"
-      }`}
-      style={{ boxShadow: disabled ? "none" : "2px 2px 0 var(--navy)" }}>
-      <span className="text-[9px] font-black uppercase tracking-wide text-muted-foreground leading-tight px-1 text-center">
-        {label}
-      </span>
-      <span className="font-lexend text-base font-black text-foreground">{count}</span>
-    </button>
-  );
-}
-
 function PlayerDropdown({
   roster, value, onChange, placeholder,
 }: {
