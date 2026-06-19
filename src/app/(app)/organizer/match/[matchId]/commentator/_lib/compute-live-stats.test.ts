@@ -93,4 +93,12 @@ describe("computeLiveStats", () => {
     const stats = computeLiveStats(events, HOME_TEAM_ID, players);
     expect(stats.performanceStats["metres_run"]?.home).toBe(20);
   });
+
+  it("does not surface a card-only player as top scorer", () => {
+    const events = [
+      makeEvent("e1", "yellow_card", HOME_TEAM_ID, PLAYER_A),
+    ];
+    const stats = computeLiveStats(events, HOME_TEAM_ID, players);
+    expect(stats.topScorer).toBeNull();
+  });
 });

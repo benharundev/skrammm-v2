@@ -1,11 +1,5 @@
-const SCORING_POINTS: Partial<Record<string, number>> = {
-  try: 5,
-  conversion: 2,
-  penalty: 3,
-  drop_goal: 3,
-};
+import { POINTS } from "@modules/match";
 
-const SCORING_EVENTS = new Set(["try", "conversion", "penalty", "drop_goal"]);
 const CARD_EVENTS = new Set(["yellow_card", "red_card"]);
 
 export interface ScoringCounts {
@@ -16,6 +10,8 @@ export interface ScoringCounts {
   yellow_card: number;
   red_card: number;
 }
+
+type ScoringKey = keyof ScoringCounts;
 
 export interface PlayerStat {
   points: number;
@@ -71,12 +67,11 @@ export function computeLiveStats(
   for (const ev of events) {
     const side = ev.teamId === homeTeamId ? "home" : "away";
 
-    if (SCORING_EVENTS.has(ev.eventType)) {
-      (breakdown[side] as Record<string, number>)[ev.eventType] =
-        ((breakdown[side] as Record<string, number>)[ev.eventType] ?? 0) + 1;
+    if (ev.eventType in POINTS) {
+      breakdown[side][ev.eventType as ScoringKey] = breakdown[side][ev.eventType as ScoringKey] + 1;
 
       if (ev.playerId) {
-        const pts = SCORING_POINTS[ev.eventType] ?? 0;
+        const pts = POINTS[ev.eventType as keyof typeof POINTS] ?? 0;
         const name = playerMap.get(ev.playerId)?.fullName ?? "Unknown";
         const existing = playerPoints.get(ev.playerId) ?? {
           points: 0, tries: 0, conversions: 0, penalties: 0,
@@ -92,8 +87,7 @@ export function computeLiveStats(
         });
       }
     } else if (CARD_EVENTS.has(ev.eventType)) {
-      (breakdown[side] as Record<string, number>)[ev.eventType] =
-        ((breakdown[side] as Record<string, number>)[ev.eventType] ?? 0) + 1;
+      breakdown[side][ev.eventType as ScoringKey] = breakdown[side][ev.eventType as ScoringKey] + 1;
 
       if (ev.playerId) {
         const name = playerMap.get(ev.playerId)?.fullName ?? "Unknown";
@@ -117,14 +111,16 @@ export function computeLiveStats(
       }
     } else {
       const existing = performanceStats[ev.eventType] ?? { home: 0, away: 0 };
-      const increment =
+      let increment = 1;
+      if (
         ev.eventType === "metres_run" &&
         ev.payload !== null &&
         typeof ev.payload === "object" &&
-        "value" in (ev.payload as object) &&
+        "value" in ev.payload &&
         typeof (ev.payload as Record<string, unknown>)["value"] === "number"
-          ? ((ev.payload as Record<string, number>)["value"] ?? 1)
-          : 1;
+      ) {
+        increment = (ev.payload as Record<string, number>)["value"] as number;
+      }
       performanceStats[ev.eventType] = {
         ...existing,
         [side]: existing[side] + increment,
@@ -136,7 +132,7 @@ export function computeLiveStats(
   let topTryScorer: LiveStats["topTryScorer"] = null;
 
   for (const [playerId, stat] of playerPoints) {
-    if (!topScorer || stat.points > topScorer.points) {
+    if (stat.points > 0 && (!topScorer || stat.points > topScorer.points)) {
       topScorer = { playerId, name: stat.name, points: stat.points };
     }
     if (stat.tries > 0 && (!topTryScorer || stat.tries > topTryScorer.tries)) {
