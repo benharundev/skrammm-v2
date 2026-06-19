@@ -31,6 +31,14 @@ type SseMessage =
   | { type: "event_deleted"; eventId: string }
   | SseScoreEvent;
 
+const STATUS_LABEL: Record<string, string> = {
+  scheduled: "UPCOMING",
+  live: "LIVE",
+  suspended: "SUSPENDED",
+  completed: "FULL TIME",
+  locked: "LOCKED",
+};
+
 export function CommentatorClient({ match }: { match: Match }) {
   const [events, setEvents] = useState<RawEvent[]>(match.events);
   const [homeScore, setHomeScore] = useState(match.homeScore);
@@ -91,14 +99,6 @@ export function CommentatorClient({ match }: { match: Match }) {
 
     return () => { source.close(); };
   }, [match.id]);
-
-  const STATUS_LABEL: Record<string, string> = {
-    scheduled: "UPCOMING",
-    live: "LIVE",
-    suspended: "SUSPENDED",
-    completed: "FULL TIME",
-    locked: "LOCKED",
-  };
 
   const isLive = status === "live";
 
