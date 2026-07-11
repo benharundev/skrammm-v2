@@ -129,6 +129,11 @@ model Team {
   trainingGround  String?
   contactEmail    String?
   contactPhone    String?
+  isPublic        Boolean  @default(false)
+  description     String?  @db.VarChar(500)
+  lat             Float?
+  lng             Float?
+  address         String?
   createdByUserId String   @db.Uuid
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -143,8 +148,10 @@ model Team {
   awayMatches       Match[]             @relation("AwayTeam")
   matchEvents       MatchEvent[]
   matchLineups      MatchLineup[]
+  trainingSlots     TrainingSlot[]
 
   @@index([createdAt])
+  @@index([isPublic])
   @@map("teams")
 }
 
@@ -168,6 +175,21 @@ model TeamStaff {
 
   @@unique([teamId, userId])
   @@map("team_staff")
+}
+
+model TrainingSlot {
+  id        String   @id @db.Uuid
+  teamId    String   @db.Uuid
+  dayOfWeek Int      // 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+  startTime String   // "19:00" (HH:mm 24h)
+  endTime   String   // "21:00"
+  venue     String?
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@map("training_slots")
 }
 
 enum ClaimStatus {
@@ -352,7 +374,11 @@ model Match {
   status       MatchStatus @default(scheduled)
   homeScore    Int         @default(0)
   awayScore    Int         @default(0)
-  lockedAt     DateTime?
+  lockedAt              DateTime?
+  startedAt             DateTime?
+  secondHalfStartedAt   DateTime?
+  pausedAt              DateTime?
+  totalPausedMs         Int       @default(0)
   videoUrl     String?
   refereeName  String?
   deletedAt    DateTime?
