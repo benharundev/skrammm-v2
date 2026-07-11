@@ -15,9 +15,11 @@ import {
 import { ArrowLeft, User } from "lucide-react";
 import Link from "next/link";
 import type { Route } from "next";
-import { updateTeamSettingsAction, updatePersonalInfoAction, getTeamLogoPresignedUrl, saveTeamLogo } from "./actions";
+import { updateTeamSettingsAction, updatePersonalInfoAction, getTeamLogoPresignedUrl, saveTeamLogo, updatePublicListingAction } from "./actions";
 import { RUGBY_POSITIONS } from "@lib/constants/rugby-positions";
 import { ImageUpload } from "@/components/image-upload";
+import { TrainingSlotsEditor } from "./_training-slots";
+import { db } from "@lib/db";
 
 export default async function TeamSettingsPage() {
   const session = await requireAuth();
@@ -26,6 +28,11 @@ export default async function TeamSettingsPage() {
     getClaimedPlayerForUser(session.user.id),
   ]);
   if (!team) notFound();
+
+  const trainingSlots = await db.trainingSlot.findMany({
+    where: { teamId: team.id },
+    orderBy: { dayOfWeek: "asc" },
+  });
 
   return (
     <div className="max-w-lg space-y-6 p-4 md:p-8">
@@ -194,6 +201,58 @@ export default async function TeamSettingsPage() {
           </Button>
         </form>
       </section>
+
+      {/* Public Listing */}
+      <section className="overflow-hidden rounded-sm border-2 border-border bg-card shadow-brutalist">
+        <div className="border-b border-border p-4">
+          <h2 className="font-[family-name:var(--font-lexend)] font-bold text-foreground">Public Listing</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Show your club in the public directory at skrammm.com/clubs
+          </p>
+        </div>
+        <form action={updatePublicListingAction} className="space-y-4 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="isPublicSelect" className="text-sm font-medium">List my club publicly</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">Players can find and contact your club</p>
+            </div>
+            <select
+              id="isPublicSelect"
+              name="isPublic"
+              defaultValue={team.isPublic ? "true" : "false"}
+              className="rounded-sm border-2 border-border bg-background px-3 py-1.5 text-sm shadow-brutalist-sm"
+            >
+              <option value="true">Listed ✓</option>
+              <option value="false">Unlisted</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="description">About Your Club</Label>
+            <textarea
+              id="description"
+              name="description"
+              maxLength={500}
+              defaultValue={team.description ?? ""}
+              placeholder="Tell players about your club, training philosophy, who's welcome..."
+              rows={3}
+              className="w-full resize-none rounded-sm border-2 border-border bg-background px-3 py-1.5 text-sm shadow-brutalist-sm focus:outline-none"
+            />
+          </div>
+          <Button type="submit" className="w-full bg-primary text-primary-foreground shadow-brutalist-sm">
+            Save Public Listing
+          </Button>
+        </form>
+      </section>
+
+      {/* Training Schedule */}
+      <TrainingSlotsEditor
+        initialSlots={trainingSlots.map((s) => ({
+          dayOfWeek: s.dayOfWeek,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          venue: s.venue ?? undefined,
+        }))}
+      />
 
       {/* Mode toggle */}
       <section className="overflow-hidden rounded-sm border-2 border-border bg-card shadow-brutalist">

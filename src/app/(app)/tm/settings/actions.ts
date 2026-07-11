@@ -2,7 +2,16 @@
 
 import { requireAuth } from "@lib/auth/server";
 import { can } from "@modules/shared";
-import { getManagerTeam, updateTeamSettings, UpdateTeamSettingsSchema, updateTeamLogo } from "@modules/team";
+import {
+  getManagerTeam,
+  updateTeamSettings,
+  UpdateTeamSettingsSchema,
+  updateTeamLogo,
+  updatePublicListing,
+  UpdatePublicListingSchema,
+  upsertTrainingSlots,
+} from "@modules/team";
+import type { TrainingSlotInput } from "@modules/team";
 import { getClaimedPlayerForUser, updatePlayerProfile, UpdateProfileSchema } from "@modules/player";
 import { revalidatePath } from "next/cache";
 import { getUploadUrl, getPublicUrl, storageKeys } from "@lib/storage";
@@ -72,4 +81,38 @@ export async function saveTeamLogo(): Promise<void> {
   revalidatePath("/tm");
   revalidatePath("/tm/settings");
   revalidatePath("/organizer", "layout");
+}
+
+export async function updatePublicListingAction(formData: FormData): Promise<void> {
+  const session = await requireAuth();
+  const team = await getManagerTeam(session.user.id);
+  if (!team) return;
+
+  const allowed = await can(session.user.id, "team:manage", { teamId: team.id });
+  if (!allowed) return;
+
+  const raw = {
+    isPublic: formData.get("isPublic") === "true",
+    description: formData.get("description") || undefined,
+  };
+
+  const parsed = UpdatePublicListingSchema.safeParse(raw);
+  if (!parsed.success) return;
+
+  await updatePublicListing(team.id, parsed.data);
+  revalidatePath("/tm/settings");
+  revalidatePath("/clubs");
+}
+
+export async function upsertTrainingSlotsAction(slots: TrainingSlotInput[]): Promise<void> {
+  const session = await requireAuth();
+  const team = await getManagerTeam(session.user.id);
+  if (!team) return;
+
+  const allowed = await can(session.user.id, "team:manage", { teamId: team.id });
+  if (!allowed) return;
+
+  await upsertTrainingSlots(team.id, slots);
+  revalidatePath("/tm/settings");
+  revalidatePath("/clubs");
 }
