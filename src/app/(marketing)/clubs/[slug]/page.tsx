@@ -1,10 +1,8 @@
 import { notFound } from "next/navigation";
 import { getTeamPublicBySlug } from "@modules/team";
-import dynamic from "next/dynamic";
+import { ClubMiniMapWrapper } from "./_map-wrapper";
 
 export const revalidate = 60;
-
-const ClubMiniMap = dynamic(() => import("./_map"), { ssr: false });
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -32,7 +30,7 @@ export default async function ClubProfilePage({
           {/* Mini map */}
           {team.lat !== null && team.lng !== null ? (
             <div className="h-48 rounded border overflow-hidden">
-              <ClubMiniMap lat={team.lat} lng={team.lng} name={team.name} />
+              <ClubMiniMapWrapper lat={team.lat} lng={team.lng} name={team.name} />
             </div>
           ) : null}
 
