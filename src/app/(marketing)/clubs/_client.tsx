@@ -83,7 +83,6 @@ export function ClubDirectoryClient({ clubs }: ClubDirectoryClientProps) {
     );
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { requestLocation(); }, []);
   useEffect(() => { setVisibleCount(INITIAL_VISIBLE); }, [search]);
 

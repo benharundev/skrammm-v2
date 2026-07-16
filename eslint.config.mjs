@@ -13,6 +13,7 @@ export default [
       "prisma/migrations/**",
       "playwright.config.ts",
       "prisma/seed.ts",
+      "prisma/seed-clubs.ts",
       "src/app/sw.ts",
     ],
   },
