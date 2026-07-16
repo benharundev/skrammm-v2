@@ -61,7 +61,16 @@ export async function GET(
       // Send initial match state
       const currentMatch = await getMatchForStream(matchId);
       if (currentMatch) {
-        send(JSON.stringify({ type: "state", homeScore: currentMatch.homeScore, awayScore: currentMatch.awayScore, status: currentMatch.status }));
+        send(JSON.stringify({
+          type: "state",
+          homeScore: currentMatch.homeScore,
+          awayScore: currentMatch.awayScore,
+          status: currentMatch.status,
+          startedAt: currentMatch.startedAt?.toISOString() ?? null,
+          secondHalfStartedAt: currentMatch.secondHalfStartedAt?.toISOString() ?? null,
+          pausedAt: currentMatch.pausedAt?.toISOString() ?? null,
+          totalPausedMs: currentMatch.totalPausedMs,
+        }));
       }
 
       // -----------------------------------------------------------------------

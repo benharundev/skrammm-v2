@@ -7,11 +7,16 @@ import type { Route } from "next";
 import {
   ArrowLeft, Zap, Clock, MapPin, User,
   RotateCcw, Lock, AlertTriangle, Play,
-  Square, ChevronDown, X, Check,
+  Square, ChevronDown, X, Check, Droplets, Timer, Video,
 } from "lucide-react";
 import { v7 as uuidv7 } from "uuid";
 import { EVENT_CONFIG, STAT_CONFIG, STAT_GROUPS } from "@/app/(app)/organizer/_lib/event-config";
 import type { getMatchWithRoster } from "@modules/match";
+import { useLiveClock } from "./_lib/use-live-clock";
+import { useAnalystShortcuts } from "./_lib/use-analyst-shortcuts";
+import { AnalystLayout } from "./_components/analyst-layout";
+import { saveVideoUrlAction } from "./actions";
+import type { PitchPin } from "./_components/pitch-svg";
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -28,6 +33,7 @@ type StatType =
   | "penalties_conceded"
   | "forward_pass" | "knock_on";
 type MatchPhase = "pre_match" | "first_half" | "halftime" | "second_half" | "completed" | "suspended" | "locked";
+type PauseType = "water_break" | "timeout" | "suspend";
 
 interface MatchEvent {
   id: string;
@@ -43,6 +49,20 @@ interface PendingAction {
   type: EventType;
   playerName: string;
   playerId: string | null;
+  pitchX?: number;
+  pitchY?: number;
+  videoTimestampMs?: number;
+}
+
+interface AnalystTag {
+  id: string;
+  eventType: string;
+  team: "home" | "away";
+  label: string;
+  colorClass: string;
+  pitchX: number;
+  pitchY: number;
+  videoTimestampMs: number;
 }
 
 interface UndoItem {
@@ -218,7 +238,12 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
   const [phase, setPhase] = useState<MatchPhase>(dbStatusToPhase(match.status));
   const [homeScore, setHomeScore] = useState(match.homeScore);
   const [awayScore, setAwayScore] = useState(match.awayScore);
-  const [minute, setMinute] = useState(match.status === "live" ? 1 : 0);
+  const [startedAt, setStartedAt] = useState<Date | null>(match.startedAt ?? null);
+  const [secondHalfStartedAt, setSecondHalfStartedAt] = useState<Date | null>(match.secondHalfStartedAt ?? null);
+  const [pausedAt, setPausedAt] = useState<Date | null>(match.pausedAt ?? null);
+  const [totalPausedMs, setTotalPausedMs] = useState(match.totalPausedMs);
+  const [pauseType, setPauseType] = useState<PauseType | null>(null);
+  const minute = useLiveClock(startedAt, secondHalfStartedAt, phase === "first_half" || phase === "second_half", pausedAt, totalPausedMs);
   const [events, setEvents] = useState<MatchEvent[]>(mapDbEvents(match.events));
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [undoItem, setUndoItem] = useState<UndoItem | null>(null);
@@ -227,10 +252,74 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
   const [mobileTab, setMobileTab] = useState<"home" | "away">("home");
   const [statsTeam, setStatsTeam] = useState<"home" | "away">("home");
   const [prePhase, setPrePhase] = useState<MatchPhase | null>(null);
+  const [analystMode, setAnalystMode] = useState(false);
+  const [activeTeam, setActiveTeam] = useState<"home" | "away">("home");
+  const [activeAction, setActiveAction] = useState<{ eventType: string; team: "home" | "away" } | null>(null);
+  const [analystTags, setAnalystTags] = useState<AnalystTag[]>([]);
+  const [videoUrl, setVideoUrl] = useState<string | null>(match.videoUrl ?? null);
 
   const isLocked = phase === "locked";
   const isSuspended = phase === "suspended";
   const canScore = (phase === "first_half" || phase === "second_half") && !isLocked && !isSuspended;
+
+  const SCORING_EVENTS = new Set(["try", "conversion", "penalty", "drop_goal", "yellow_card", "red_card"]);
+
+  function getTagLabel(eventType: string): { label: string; colorClass: string } {
+    if (eventType in EVENT_CONFIG) {
+      const cfg = EVENT_CONFIG[eventType as keyof typeof EVENT_CONFIG];
+      return { label: cfg.label, colorClass: cfg.colorClass };
+    }
+    if (eventType in STAT_CONFIG) {
+      const cfg = STAT_CONFIG[eventType as keyof typeof STAT_CONFIG];
+      return { label: cfg.label, colorClass: "bg-navy/60 text-white" };
+    }
+    return { label: eventType.slice(0, 4).toUpperCase(), colorClass: "bg-muted text-foreground" };
+  }
+
+  useAnalystShortcuts({
+    enabled: analystMode && canScore,
+    activeTeam,
+    onTeamChange: setActiveTeam,
+    onActionSelect: (eventType) => setActiveAction({ eventType, team: activeTeam }),
+    onCancel: () => setActiveAction(null),
+  });
+
+  function handlePitchClick(coords: { pitchX: number; pitchY: number }, videoTimestampMs: number) {
+    if (!activeAction || !canScore) return;
+    const { eventType, team } = activeAction;
+    setActiveAction(null);
+
+    if (SCORING_EVENTS.has(eventType)) {
+      setPendingAction({
+        team,
+        type: eventType as EventType,
+        playerName: "",
+        playerId: null,
+        pitchX: coords.pitchX,
+        pitchY: coords.pitchY,
+        videoTimestampMs,
+      });
+    } else {
+      const { label, colorClass } = getTagLabel(eventType);
+      const tagId = uuidv7();
+      setAnalystTags(tags => [
+        { id: tagId, eventType, team, label, colorClass, ...coords, videoTimestampMs },
+        ...tags,
+      ]);
+      incrementStat(team, eventType as StatType, 1, {
+        pitchX: coords.pitchX,
+        pitchY: coords.pitchY,
+        videoTimestampMs,
+      });
+    }
+  }
+
+  const pitchPins: PitchPin[] = analystTags.map(t => ({
+    pitchX: t.pitchX,
+    pitchY: t.pitchY,
+    eventType: t.eventType,
+    team: t.team,
+  }));
 
   type StatsMap = Record<StatType, number>;
   const EMPTY_STATS: StatsMap = {
@@ -305,8 +394,6 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
     setUndoItem(prev => { if (prev) clearTimeout(prev.timeout); return null; });
   }, []);
 
-  const addMinute = () => setMinute(m => m + 1);
-
   const initiateScore = (team: "home" | "away", type: EventType) => {
     if (!canScore) return;
     setPendingAction({ team, type, playerName: "", playerId: null });
@@ -337,6 +424,28 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
     setPendingAction(null);
 
     const teamId = teamSide === "home" ? match.homeTeam.id : match.awayTeam.id;
+    const pitchPayload: Record<string, unknown> = {};
+    if (pendingAction.pitchX !== undefined) pitchPayload.pitchX = pendingAction.pitchX;
+    if (pendingAction.pitchY !== undefined) pitchPayload.pitchY = pendingAction.pitchY;
+    if (pendingAction.videoTimestampMs !== undefined) pitchPayload.videoTimestampMs = pendingAction.videoTimestampMs;
+
+    if (Object.keys(pitchPayload).length > 0) {
+      const { label, colorClass } = getTagLabel(eventType);
+      setAnalystTags(tags => [
+        {
+          id: optimisticId,
+          eventType,
+          team: teamSide,
+          label,
+          colorClass,
+          pitchX: pendingAction.pitchX!,
+          pitchY: pendingAction.pitchY!,
+          videoTimestampMs: pendingAction.videoTimestampMs!,
+        },
+        ...tags,
+      ]);
+    }
+
     try {
       const res = await fetch(`/api/organizer/match/${matchId}/event`, {
         method: "POST",
@@ -346,6 +455,7 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
           eventType,
           minute,
           ...(playerId ? { playerId } : {}),
+          ...(Object.keys(pitchPayload).length > 0 ? { payload: pitchPayload } : {}),
         }),
       });
       if (!res.ok) {
@@ -364,6 +474,7 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
       if (teamSide === "home") setHomeScore(s => s - pts);
       else setAwayScore(s => s - pts);
       setEvents(evs => evs.filter(e => e.id !== optimisticId));
+      setAnalystTags(tags => tags.filter(t => t.id !== optimisticId));
       clearUndo();
       toast.error(err instanceof Error ? err.message : "Failed to record event");
     }
@@ -404,9 +515,18 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
     if (next === "locked") { setShowLockDialog(true); return; }
     setPhase(next);
     try {
-      if (next === "first_half") { setMinute(0); await postPhase("live"); }
-      if (next === "second_half") setMinute(40);
-      // halftime → second_half and first_half → halftime are both "live" in DB; no phase API call needed
+      if (next === "first_half") {
+        const now = new Date();
+        await postPhase("live");
+        setStartedAt(now);
+      }
+      if (next === "second_half") {
+        const now = new Date();
+        await postPhase("live"); // records secondHalfStartedAt on server
+        setSecondHalfStartedAt(now);
+        setTotalPausedMs(0);
+        setPausedAt(null);
+      }
       if (next === "completed") await postPhase("completed");
     } catch (err) {
       setPhase(prev);
@@ -414,28 +534,41 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
     }
   };
 
-  const suspend = async () => {
+  const pauseMatch = async (type: PauseType) => {
     const prev = phase;
     setShowSuspendDialog(false);
     setPrePhase(prev);
     setPhase("suspended");
+    const now = new Date();
+    setPausedAt(now);
+    setPauseType(type);
     try {
       await postPhase("suspended");
     } catch (err) {
       setPhase(prev);
-      toast.error(err instanceof Error ? err.message : "Failed to suspend match");
+      setPausedAt(null);
+      setPauseType(null);
+      toast.error(err instanceof Error ? err.message : "Failed to pause match");
     }
   };
 
   const resume = async () => {
     const prev = phase;
     const next = prePhase ?? "second_half";
+    const nowMs = Date.now();
+    const additionalMs = pausedAt ? nowMs - pausedAt.getTime() : 0;
     setPhase(next);
     setPrePhase(null);
+    setTotalPausedMs(t => t + additionalMs);
+    setPausedAt(null);
+    setPauseType(null);
     try {
       await postPhase("live");
     } catch (err) {
       setPhase(prev);
+      setTotalPausedMs(t => t - additionalMs);
+      setPausedAt(pausedAt);
+      setPauseType(pauseType);
       toast.error(err instanceof Error ? err.message : "Failed to resume match");
     }
   };
@@ -613,24 +746,43 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
           <Zap className="h-3.5 w-3.5" />
           COMMENTATOR VIEW
         </Link>
+        <button
+          onClick={() => { setAnalystMode(m => !m); setActiveAction(null); }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold tracking-wide rounded-lg transition-colors flex-shrink-0 ${
+            analystMode
+              ? "bg-fair-play-gold text-pitch-green"
+              : "bg-white/10 hover:bg-white/20 text-white"
+          }`}
+        >
+          <Video className="h-3.5 w-3.5" />
+          ANALYST
+        </button>
         <span className={`px-2.5 py-1 rounded-sm border-2 flex-shrink-0 text-xs font-bold ${phase === "locked" ? "border-muted bg-muted text-muted-foreground" : phase === "suspended" ? "border-red-card bg-red-card/20 text-white" : phase === "first_half" || phase === "second_half" ? "border-fair-play-gold bg-fair-play-gold/20 text-fair-play-gold animate-pulse" : "border-white/30 bg-white/10 text-white/80"}`}>
           {PHASE_LABELS[phase]}
         </span>
       </div>
 
-      {/* Suspended banner */}
-      {isSuspended && (
-        <div className="bg-red-card border-b-2 border-red-card/50 px-5 py-3 flex items-center justify-between gap-3 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={16} className="text-white" />
-            <p className="text-white font-bold text-sm">Match Suspended</p>
+      {/* Pause banner — Water Break / Timeout / Suspend */}
+      {isSuspended && (() => {
+        const PAUSE_CONFIG: Record<PauseType, { bg: string; label: string; icon: React.ReactNode }> = {
+          water_break: { bg: "bg-[#0ea5e9]", label: "Water Break",     icon: <Droplets size={16} className="text-white" /> },
+          timeout:     { bg: "bg-navy",      label: "Team Timeout",     icon: <Timer size={16} className="text-white" /> },
+          suspend:     { bg: "bg-red-card",  label: "Match Suspended",  icon: <AlertTriangle size={16} className="text-white" /> },
+        };
+        const cfg = PAUSE_CONFIG[pauseType ?? "suspend"];
+        return (
+          <div className={`${cfg.bg} border-b-2 border-black/10 px-5 py-3 flex items-center justify-between gap-3 flex-shrink-0`}>
+            <div className="flex items-center gap-2">
+              {cfg.icon}
+              <p className="text-white font-bold text-sm">{cfg.label}</p>
+            </div>
+            <button onClick={resume}
+              className="flex items-center gap-1.5 bg-white text-foreground border-2 border-white px-3 h-8 rounded-sm hover:bg-white/90 transition-colors text-xs font-black">
+              <Play size={12} /> Resume
+            </button>
           </div>
-          <button onClick={resume}
-            className="flex items-center gap-1.5 bg-white text-red-card border-2 border-white px-3 h-8 rounded-sm hover:bg-white/90 transition-colors text-xs font-black">
-            <Play size={12} /> Resume
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Undo bar */}
       {undoItem && (
@@ -658,10 +810,9 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
           </div>
           <div className="flex flex-col items-center gap-1 flex-shrink-0">
             <span className="text-white/40 font-lexend text-[28px] font-black">—</span>
-            <button onClick={addMinute} disabled={!canScore}
-              className={`flex items-center gap-1 px-2.5 h-7 border-2 rounded-sm transition-colors text-xs font-bold ${canScore ? "border-fair-play-gold/50 text-fair-play-gold hover:border-fair-play-gold" : "border-white/20 text-white/40 cursor-not-allowed"}`}>
+            <span className={`flex items-center gap-1 px-2.5 h-7 border-2 rounded-sm text-xs font-bold tabular-nums ${canScore ? "border-fair-play-gold/50 text-fair-play-gold" : "border-white/20 text-white/40"}`}>
               <Clock size={11} /> {minute}&apos;
-            </button>
+            </span>
           </div>
           <div className="flex flex-col items-start gap-1 flex-1 min-w-0">
             <p className="text-white truncate w-full text-[13px] font-bold">{awayName}</p>
@@ -670,6 +821,36 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
         </div>
       </div>
 
+      {analystMode ? (
+        <AnalystLayout
+          videoUrl={videoUrl}
+          activeAction={activeAction}
+          activeTeam={activeTeam}
+          pins={pitchPins}
+          analystTags={analystTags}
+          homeStats={homeStats}
+          awayStats={awayStats}
+          canScore={canScore}
+          homeShort={homeShort}
+          awayShort={awayShort}
+          homeTeamName={homeName}
+          awayTeamName={awayName}
+          pendingAction={pendingAction}
+          homeRoster={homeRoster}
+          awayRoster={awayRoster}
+          onTeamChange={setActiveTeam}
+          onPitchClick={handlePitchClick}
+          onUrlSave={async (url) => {
+            setVideoUrl(url);
+            await saveVideoUrlAction(matchId, url);
+          }}
+          onConfirm={confirmScore}
+          onCancel={() => setPendingAction(null)}
+          onPlayerSelect={(id, name) =>
+            setPendingAction((a) => (a ? { ...a, playerName: name, playerId: id } : a))
+          }
+        />
+      ) : (
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         {/* Mobile team tabs */}
         <div className="flex sm:hidden border-2 border-border rounded-sm overflow-hidden">
@@ -725,10 +906,20 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
                 </button>
               )}
               {!isSuspended && (phase === "first_half" || phase === "second_half") && (
-                <button onClick={() => setShowSuspendDialog(true)}
-                  className="flex items-center gap-2 border-2 border-red-card text-red-card px-4 h-11 rounded-sm hover:bg-red-card/10 transition-colors text-sm font-bold">
-                  <Square size={14} /> Suspend
-                </button>
+                <>
+                  <button onClick={() => void pauseMatch("water_break")}
+                    className="flex items-center gap-2 border-2 border-[#0ea5e9] text-[#0ea5e9] px-4 h-11 rounded-sm hover:bg-[#0ea5e9]/10 transition-colors text-sm font-bold">
+                    <Droplets size={14} /> Water Break
+                  </button>
+                  <button onClick={() => void pauseMatch("timeout")}
+                    className="flex items-center gap-2 border-2 border-navy text-navy px-4 h-11 rounded-sm hover:bg-navy/10 transition-colors text-sm font-bold">
+                    <Timer size={14} /> Timeout
+                  </button>
+                  <button onClick={() => setShowSuspendDialog(true)}
+                    className="flex items-center gap-2 border-2 border-red-card text-red-card px-4 h-11 rounded-sm hover:bg-red-card/10 transition-colors text-sm font-bold">
+                    <Square size={14} /> Suspend
+                  </button>
+                </>
               )}
               {isSuspended && (
                 <button onClick={resume}
@@ -787,6 +978,7 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
           )}
         </div>
       </div>
+      )}
 
       {/* Suspend dialog */}
       {showSuspendDialog && (
@@ -800,7 +992,7 @@ export function MatchCenterClient({ match }: { match: MatchWithRoster }) {
               Clock stops. Scoring disabled until you resume. Use for injuries, weather, or pitch issues.
             </p>
             <div className="flex items-center gap-2">
-              <button onClick={suspend}
+              <button onClick={() => void pauseMatch("suspend")}
                 className="flex-1 bg-red-card text-white border-2 border-red-card h-11 rounded-sm hover:bg-red-card/90 transition-colors text-sm font-black">
                 Suspend
               </button>

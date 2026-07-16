@@ -4,6 +4,7 @@ import { requireAuth } from "@lib/auth/server";
 import { db } from "@lib/db";
 import { createTeamWithSlots, CreatePublicTeamSchema } from "@modules/team";
 import type { CreatePublicTeamInput } from "@modules/team";
+import { getUploadUrl, getPublicUrl, storageKeys } from "@lib/storage";
 
 export async function geocodeAddressAction(query: string): Promise<
   Array<{
@@ -18,7 +19,7 @@ export async function geocodeAddressAction(query: string): Promise<
     q: query,
     format: "json",
     limit: "5",
-    countrycodes: "my", // Malaysia-focused
+    countrycodes: "my",
   });
 
   const response = await fetch(
@@ -28,7 +29,7 @@ export async function geocodeAddressAction(query: string): Promise<
         "User-Agent": "Skrammm/1.0 (skrammm.com)",
         "Accept-Language": "en",
       },
-      next: { revalidate: 0 }, // never cache geocode results
+      next: { revalidate: 0 },
     }
   );
 
@@ -48,20 +49,18 @@ export async function geocodeAddressAction(query: string): Promise<
 
 export async function submitRegistrationAction(
   input: CreatePublicTeamInput
-): Promise<{ ok: true; slug: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; slug: string; teamId: string } | { ok: false; error: string }> {
   const session = await requireAuth();
 
-  // Check if this user already has a team (prevent duplicate registrations)
   const existingTeam = await db.team.findFirst({
     where: {
       staff: { some: { userId: session.user.id, isPrimaryManager: true } },
     },
-    select: { slug: true },
+    select: { slug: true, id: true },
   });
 
   if (existingTeam) {
-    // User already has a team — just return their slug so they can go to /tm
-    return { ok: true, slug: existingTeam.slug };
+    return { ok: true, slug: existingTeam.slug, teamId: existingTeam.id };
   }
 
   const parsed = CreatePublicTeamSchema.safeParse(input);
@@ -71,8 +70,53 @@ export async function submitRegistrationAction(
 
   try {
     const team = await createTeamWithSlots(session.user.id, parsed.data);
-    return { ok: true, slug: team.slug };
+    return { ok: true, slug: team.slug, teamId: team.id };
   } catch {
     return { ok: false, error: "Failed to create club. Please try again." };
   }
+}
+
+export async function getRegistrationLogoUploadUrl(
+  teamId: string,
+  contentType: string
+): Promise<string> {
+  const session = await requireAuth();
+  const team = await db.team.findFirst({
+    where: { id: teamId, staff: { some: { userId: session.user.id } } },
+    select: { id: true },
+  });
+  if (!team) throw new Error("Unauthorized");
+  const ext =
+    contentType === "image/png"
+      ? "png"
+      : contentType === "image/webp"
+      ? "webp"
+      : contentType === "image/gif"
+      ? "gif"
+      : "jpg";
+  const key = storageKeys.teamLogo(teamId, ext);
+  return getUploadUrl(key, contentType);
+}
+
+export async function confirmLogoUploadAction(
+  teamId: string,
+  contentType: string
+): Promise<void> {
+  const session = await requireAuth();
+  const team = await db.team.findFirst({
+    where: { id: teamId, staff: { some: { userId: session.user.id } } },
+    select: { id: true },
+  });
+  if (!team) return;
+  const ext =
+    contentType === "image/png"
+      ? "png"
+      : contentType === "image/webp"
+      ? "webp"
+      : contentType === "image/gif"
+      ? "gif"
+      : "jpg";
+  const key = storageKeys.teamLogo(teamId, ext);
+  const url = getPublicUrl(key);
+  await db.team.update({ where: { id: teamId }, data: { logoUrl: url } });
 }

@@ -111,6 +111,7 @@ export async function getMatchForStream(matchId: string) {
     where: { id: matchId },
     select: {
       id: true, status: true, homeScore: true, awayScore: true,
+      startedAt: true, secondHalfStartedAt: true, pausedAt: true, totalPausedMs: true,
       homeTeam: { select: { id: true, name: true, logoUrl: true } },
       awayTeam: { select: { id: true, name: true, logoUrl: true } },
       events: {
@@ -342,22 +343,55 @@ async function refreshMatchPlayersReliability(matchId: string): Promise<void> {
 
 // Transition match to a new status phase; publishes phase_change event over SSE
 export async function transitionMatchPhase(matchId: string, toStatus: MatchPhaseStatus): Promise<void> {
-  const match = await db.match.findUnique({ where: { id: matchId }, select: { status: true, homeTeamId: true, awayTeamId: true } });
+  const match = await db.match.findUnique({
+    where: { id: matchId },
+    select: { status: true, homeTeamId: true, awayTeamId: true, startedAt: true, pausedAt: true, totalPausedMs: true },
+  });
   if (!match) throw new Error("Match not found");
 
-  const allowed = VALID_TRANSITIONS[match.status as MatchPhaseStatus] ?? [];
-  if (!allowed.includes(toStatus)) {
-    throw new Error(`Cannot transition match from ${match.status} to ${toStatus}`);
+  // live → live is valid only as a second-half kickoff (match already started)
+  const isSecondHalfKickoff = toStatus === "live" && match.status === "live" && match.startedAt !== null;
+
+  if (!isSecondHalfKickoff) {
+    const allowed = VALID_TRANSITIONS[match.status as MatchPhaseStatus] ?? [];
+    if (!allowed.includes(toStatus)) {
+      throw new Error(`Cannot transition match from ${match.status} to ${toStatus}`);
+    }
   }
+
+  const now = new Date();
+  const isFirstKickoff    = toStatus === "live"      && !match.startedAt;
+  const isEnteringPause   = toStatus === "suspended" && match.status === "live";
+  const isResumingPause   = toStatus === "live"      && match.status === "suspended";
+
+  const newTotalPausedMs = isResumingPause && match.pausedAt
+    ? match.totalPausedMs + (now.getTime() - match.pausedAt.getTime())
+    : isSecondHalfKickoff
+    ? 0
+    : match.totalPausedMs;
 
   await db.match.update({
     where: { id: matchId },
     data: {
       status: toStatus,
-      ...(toStatus === "locked" ? { lockedAt: new Date() } : {}),
+      ...(toStatus === "locked"  ? { lockedAt: now }                                                        : {}),
+      ...(isFirstKickoff         ? { startedAt: now }                                                       : {}),
+      ...(isSecondHalfKickoff    ? { secondHalfStartedAt: now, totalPausedMs: 0, pausedAt: null }           : {}),
+      ...(isEnteringPause        ? { pausedAt: now }                                                        : {}),
+      ...(isResumingPause && match.pausedAt ? { totalPausedMs: newTotalPausedMs, pausedAt: null }           : {}),
     },
   });
-  publish(matchId, { type: "phase_change", status: toStatus });
+
+  const publishedStartedAt = isFirstKickoff ? now : match.startedAt;
+
+  publish(matchId, {
+    type: "phase_change",
+    status: toStatus,
+    startedAt: publishedStartedAt?.toISOString() ?? null,
+    secondHalfStartedAt: isSecondHalfKickoff ? now.toISOString() : null,
+    pausedAt: isEnteringPause ? now.toISOString() : null,
+    totalPausedMs: newTotalPausedMs,
+  });
 
   // Batch-refresh reliability snapshots for all lineup players without blocking
   if (toStatus === "locked") {
@@ -409,6 +443,7 @@ export async function updateMatchMetadata(matchId: string, input: UpdateMatchMet
       ...(input.refereeName !== undefined ? { refereeName: input.refereeName } : {}),
       ...(input.pitch !== undefined ? { pitch: input.pitch } : {}),
       ...(input.scheduledAt !== undefined ? { scheduledAt: input.scheduledAt } : {}),
+      ...(input.videoUrl !== undefined ? { videoUrl: input.videoUrl } : {}),
     },
   });
 }

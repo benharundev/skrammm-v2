@@ -98,6 +98,7 @@ export interface UpdateMatchMetadataInput {
   refereeName?: string | null;
   pitch?: string | null;
   scheduledAt?: Date;
+  videoUrl?: string | null;
 }
 
 // Valid Prisma MatchStatus values (must match the DB enum exactly)

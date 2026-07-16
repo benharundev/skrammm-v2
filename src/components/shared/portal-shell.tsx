@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -61,6 +62,7 @@ export function PortalShell({ portal, user, children }: PortalShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const navItems = MOBILE_NAV[portal];
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const displayName = user.name?.trim() || user.email.split("@")[0] || "User";
   const initials = displayName.slice(0, 2).toUpperCase();
@@ -74,7 +76,12 @@ export function PortalShell({ portal, user, children }: PortalShellProps) {
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex">
-        <AppSidebar portal={portal} user={user} />
+        <AppSidebar
+          portal={portal}
+          user={user}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+        />
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">

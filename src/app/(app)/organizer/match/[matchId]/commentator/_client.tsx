@@ -8,6 +8,7 @@ import { computeLiveStats } from "./_lib/compute-live-stats";
 import type { LiveStats, PlayerStat, CardedPlayer, ScoringCounts } from "./_lib/compute-live-stats";
 import { STAT_GROUPS, STAT_CONFIG } from "@/app/(app)/organizer/_lib/event-config";
 import type { getMatchWithRoster } from "@modules/match";
+import { useLiveClock } from "../_lib/use-live-clock";
 
 type Match = NonNullable<Awaited<ReturnType<typeof getMatchWithRoster>>>;
 type RawEvent = Match["events"][number];
@@ -26,8 +27,8 @@ type SseScoreEvent = {
 };
 
 type SseMessage =
-  | { type: "state"; homeScore: number; awayScore: number; status: string }
-  | { type: "phase_change"; status: string }
+  | { type: "state"; homeScore: number; awayScore: number; status: string; startedAt: string | null; secondHalfStartedAt: string | null; pausedAt: string | null; totalPausedMs: number }
+  | { type: "phase_change"; status: string; startedAt: string | null; secondHalfStartedAt: string | null; pausedAt: string | null; totalPausedMs: number }
   | { type: "event_deleted"; eventId: string }
   | SseScoreEvent;
 
@@ -44,8 +45,13 @@ export function CommentatorClient({ match }: { match: Match }) {
   const [homeScore, setHomeScore] = useState(match.homeScore);
   const [awayScore, setAwayScore] = useState(match.awayScore);
   const [status, setStatus] = useState(match.status);
+  const [startedAt, setStartedAt] = useState<Date | null>(match.startedAt ?? null);
+  const [secondHalfStartedAt, setSecondHalfStartedAt] = useState<Date | null>(match.secondHalfStartedAt ?? null);
+  const [pausedAt, setPausedAt] = useState<Date | null>(match.pausedAt ?? null);
+  const [totalPausedMs, setTotalPausedMs] = useState(match.totalPausedMs);
   const [connected, setConnected] = useState(false);
   const lastEventIdRef = useRef<string | null>(null);
+  const minute = useLiveClock(startedAt, secondHalfStartedAt, status === "live", pausedAt, totalPausedMs);
 
   const playerMap = useMemo(() => {
     const map = new Map<string, { fullName: string }>();
@@ -70,10 +76,18 @@ export function CommentatorClient({ match }: { match: Match }) {
         setHomeScore(data.homeScore);
         setAwayScore(data.awayScore);
         setStatus(data.status as Match["status"]);
+        if (data.startedAt) setStartedAt(new Date(data.startedAt));
+        if (data.secondHalfStartedAt) setSecondHalfStartedAt(new Date(data.secondHalfStartedAt));
+        setPausedAt(data.pausedAt ? new Date(data.pausedAt) : null);
+        setTotalPausedMs(data.totalPausedMs);
         return;
       }
       if ("type" in data && data.type === "phase_change") {
         setStatus(data.status as Match["status"]);
+        if (data.startedAt) setStartedAt(new Date(data.startedAt));
+        if (data.secondHalfStartedAt) setSecondHalfStartedAt(new Date(data.secondHalfStartedAt));
+        setPausedAt(data.pausedAt ? new Date(data.pausedAt) : null);
+        setTotalPausedMs(data.totalPausedMs);
         return;
       }
       if ("type" in data && data.type === "event_deleted") {
@@ -183,6 +197,11 @@ export function CommentatorClient({ match }: { match: Match }) {
               >
                 {STATUS_LABEL[status] ?? status.toUpperCase()}
               </span>
+              {startedAt && (
+                <span className="text-fair-play-gold font-extrabold tabular-nums text-sm">
+                  {minute}&apos;
+                </span>
+              )}
             </div>
           </div>
 

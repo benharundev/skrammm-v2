@@ -7,6 +7,8 @@ import type { Route } from "next";
 import {
   Activity,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   LayoutDashboard,
   LogOut,
@@ -72,9 +74,11 @@ interface AppSidebarProps {
   portal: Portal;
   user: AppSidebarUser;
   onClose?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export function AppSidebar({ portal, user, onClose }: AppSidebarProps) {
+export function AppSidebar({ portal, user, onClose, collapsed = false, onToggleCollapse }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const links = PORTAL_NAV[portal];
@@ -100,24 +104,48 @@ export function AppSidebar({ portal, user, onClose }: AppSidebarProps) {
   }
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <aside
+      className={cn(
+        "flex h-full shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width]",
+        collapsed ? "w-12" : "w-64",
+      )}
+    >
       {/* Brand + portal badge / role switcher */}
-      <div className="px-5 py-6">
-        <Link href={`/${portal}` as Route}>
-          <Image
-            src="/logos/logo-h-yellow.png"
-            alt="Skrammm"
-            width={115}
-            height={32}
-            priority
-          />
+      <div className={cn("py-6", collapsed ? "px-2" : "px-5")}>
+        <Link
+          href={`/${portal}` as Route}
+          className={cn("flex", collapsed ? "justify-center" : "")}
+          aria-label="Skrammm home"
+        >
+          {collapsed ? (
+            <Image
+              src="/logos/logo-icon-yellow.png"
+              alt="Skrammm"
+              width={28}
+              height={28}
+              priority
+            />
+          ) : (
+            <Image
+              src="/logos/logo-h-yellow.png"
+              alt="Skrammm"
+              width={115}
+              height={32}
+              priority
+            />
+          )}
         </Link>
         {context === "organizer" ? (
-          <span className="mt-2 inline-block rounded-sm bg-sidebar-accent px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-sidebar-accent-foreground">
+          <span
+            className={cn(
+              "mt-2 rounded-sm bg-sidebar-accent px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-sidebar-accent-foreground",
+              collapsed ? "hidden" : "inline-block",
+            )}
+          >
             {PORTAL_LABEL[portal]}
           </span>
         ) : (
-          <div className="mt-2">
+          <div className={cn("mt-2", collapsed ? "hidden" : "")}>
             <RoleSwitcher current={portal} context={context} />
           </div>
         )}
@@ -126,7 +154,7 @@ export function AppSidebar({ portal, user, onClose }: AppSidebarProps) {
       <Separator className="my-3 bg-sidebar-border" />
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3" aria-label="Primary">
+      <nav className={cn("flex-1 space-y-1 overflow-y-auto", collapsed ? "px-2" : "px-3")} aria-label="Primary">
         {links.map(({ label, href, icon: Icon }) => {
           const active = isActive(href);
           return (
@@ -135,15 +163,17 @@ export function AppSidebar({ portal, user, onClose }: AppSidebarProps) {
               href={href as Parameters<typeof Link>[0]["href"]}
               aria-current={active ? "page" : undefined}
               onClick={() => onClose?.()}
+              title={collapsed ? label : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-sm px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center rounded-sm py-2 text-sm font-medium transition-colors",
+                collapsed ? "justify-center px-2" : "gap-3 px-3",
                 active
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               )}
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {label}
+              <span className={cn(collapsed && "hidden")}>{label}</span>
             </Link>
           );
         })}
@@ -163,15 +193,17 @@ export function AppSidebar({ portal, user, onClose }: AppSidebarProps) {
                   href={href as Parameters<typeof Link>[0]["href"]}
                   aria-current={active ? "page" : undefined}
                   onClick={() => onClose?.()}
+                  title={collapsed ? label : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-sm px-3 py-2 text-sm font-medium transition-colors",
+                    "flex items-center rounded-sm py-2 text-sm font-medium transition-colors",
+                    collapsed ? "justify-center px-2" : "gap-3 px-3",
                     active
                       ? "bg-sidebar-primary text-sidebar-primary-foreground"
                       : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  {label}
+                  <span className={cn(collapsed && "hidden")}>{label}</span>
                 </Link>
               );
             })}
@@ -182,15 +214,15 @@ export function AppSidebar({ portal, user, onClose }: AppSidebarProps) {
       <Separator className="my-3 bg-sidebar-border" />
 
       {/* User + sign out */}
-      <div className="px-3 pb-5">
-        <div className="flex items-center gap-3 px-2 py-2">
-          <Avatar className="h-9 w-9 border border-sidebar-border">
+      <div className={cn("pb-3", collapsed ? "px-2" : "px-3")}>
+        <div className={cn("flex items-center py-2", collapsed ? "justify-center px-0" : "gap-3 px-2")}>
+          <Avatar className="h-9 w-9 shrink-0 border border-sidebar-border" title={collapsed ? displayName : undefined}>
             <AvatarImage src={user.image ?? undefined} alt={displayName} />
             <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground">
               {initials}
             </AvatarFallback>
           </Avatar>
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0 flex-1", collapsed && "hidden")}>
             <p className="truncate text-sm font-medium text-sidebar-foreground">
               {displayName}
             </p>
@@ -204,13 +236,43 @@ export function AppSidebar({ portal, user, onClose }: AppSidebarProps) {
             type="button"
             variant="ghost"
             onClick={handleSignOut}
-            className="mt-1 w-full justify-start gap-3 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            title={collapsed ? "Sign out" : undefined}
+            className={cn(
+              "mt-1 w-full text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              collapsed ? "justify-center px-0" : "justify-start gap-3",
+            )}
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
-            Sign out
+            <span className={cn(collapsed && "hidden")}>Sign out</span>
           </Button>
         )}
       </div>
+
+      {/* Collapse toggle */}
+      {onToggleCollapse && (
+        <div className={cn("border-t border-sidebar-border pb-4 pt-2", collapsed ? "px-2" : "px-3")}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onToggleCollapse}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              collapsed ? "justify-center px-0" : "justify-start gap-3",
+            )}
+          >
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <>
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                <span>Collapse</span>
+              </>
+            )}
+          </Button>
+        </div>
+      )}
     </aside>
   );
 }

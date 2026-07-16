@@ -25,10 +25,18 @@ export async function POST(
       eventType?: unknown;
       minute?: unknown;
       playerId?: unknown;
+      payload?: unknown;
     };
     if (typeof body.teamId !== "string" || typeof body.eventType !== "string") {
       return Response.json({ error: "Missing fields" }, { status: 400 });
     }
+
+    const payload =
+      body.payload !== null &&
+      typeof body.payload === "object" &&
+      !Array.isArray(body.payload)
+        ? (body.payload as Record<string, unknown>)
+        : undefined;
 
     const result = await addMatchEvent(session.user.id, {
       matchId,
@@ -36,6 +44,7 @@ export async function POST(
       eventType: body.eventType as Parameters<typeof addMatchEvent>[1]["eventType"],
       minute: typeof body.minute === "number" ? body.minute : undefined,
       playerId: typeof body.playerId === "string" ? body.playerId : undefined,
+      ...(payload !== undefined ? { payload } : {}),
     });
 
     revalidatePath("/organizer");

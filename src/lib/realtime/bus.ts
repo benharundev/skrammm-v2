@@ -25,6 +25,10 @@ export interface MatchScoreEvent {
 export interface MatchPhaseChangeEvent {
   type: "phase_change";
   status: string;
+  startedAt: string | null;
+  secondHalfStartedAt: string | null;
+  pausedAt: string | null;
+  totalPausedMs: number;
 }
 
 // A match event that was soft-deleted (its score contribution reversed)

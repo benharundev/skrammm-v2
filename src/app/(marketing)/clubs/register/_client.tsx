@@ -1,9 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { authClient } from "@/lib/auth/client";
-import { geocodeAddressAction, submitRegistrationAction } from "./actions";
+import {
+  geocodeAddressAction,
+  submitRegistrationAction,
+  getRegistrationLogoUploadUrl,
+  confirmLogoUploadAction,
+} from "./actions";
 import type { TrainingSlotInput } from "@modules/team";
 
 const LocationMap = dynamic(() => import("./_location-map"), { ssr: false });
@@ -32,11 +37,11 @@ type GeoResult = {
 };
 
 function StepIndicator({ step }: { step: Step }) {
-  const steps = [
-    { n: 1 as Step, label: "Club Info" },
-    { n: 2 as Step, label: "Location" },
-    { n: 3 as Step, label: "Training" },
-    { n: 4 as Step, label: "Verify" },
+  const steps: { n: Step; label: string }[] = [
+    { n: 1, label: "Club Info" },
+    { n: 2, label: "Location" },
+    { n: 3, label: "Training" },
+    { n: 4, label: "Verify" },
   ];
   return (
     <div className="flex items-center justify-center gap-0 mb-6">
@@ -83,6 +88,8 @@ export function RegisterWizard() {
     contactEmail: "",
     contactPhone: "",
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [location, setLocation] = useState<LocationState | null>(null);
   const [trainingSlots, setTrainingSlots] = useState<TrainingSlotInput[]>([]);
   const [email, setEmail] = useState("");
@@ -90,8 +97,9 @@ export function RegisterWizard() {
   const [otp, setOtp] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Step 2 specific state
+  // Step 2 state
   const [addressQuery, setAddressQuery] = useState("");
   const [geoResults, setGeoResults] = useState<GeoResult[]>([]);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -100,6 +108,14 @@ export function RegisterWizard() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) {
     setClubInfo((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  }
+
+  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoFile(file);
+    const url = URL.createObjectURL(file);
+    setLogoPreview(url);
   }
 
   function handleStep1Next() {
@@ -143,11 +159,13 @@ export function RegisterWizard() {
     ]);
   }
 
-  function updateSlot(index: number, field: keyof TrainingSlotInput, value: string | number) {
+  function updateSlot(
+    index: number,
+    field: keyof TrainingSlotInput,
+    value: string | number
+  ) {
     setTrainingSlots((prev) =>
-      prev.map((slot, i) =>
-        i === index ? { ...slot, [field]: value } : slot
-      )
+      prev.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot))
     );
   }
 
@@ -182,7 +200,7 @@ export function RegisterWizard() {
     setIsLoading(true);
     setError(null);
 
-    // 1. Verify OTP — sets session cookie
+    // 1. Verify OTP
     const signInResult = await authClient.signIn.emailOtp({ email, otp });
     if (signInResult.error) {
       setIsLoading(false);
@@ -190,7 +208,7 @@ export function RegisterWizard() {
       return;
     }
 
-    // 2. Submit registration
+    // 2. Create team
     const result = await submitRegistrationAction({
       name: clubInfo.name,
       description: clubInfo.description || undefined,
@@ -202,14 +220,34 @@ export function RegisterWizard() {
       trainingSlots,
     });
 
-    setIsLoading(false);
-
     if (!result.ok) {
+      setIsLoading(false);
       setError(result.error);
       return;
     }
 
-    // 3. Redirect to TM portal
+    // 3. Upload logo if provided (non-blocking — logo is optional)
+    if (logoFile) {
+      try {
+        const contentType = logoFile.type || "image/jpeg";
+        const uploadUrl = await getRegistrationLogoUploadUrl(
+          result.teamId,
+          contentType
+        );
+        await fetch(uploadUrl, {
+          method: "PUT",
+          body: logoFile,
+          headers: { "Content-Type": contentType },
+        });
+        await confirmLogoUploadAction(result.teamId, contentType);
+      } catch {
+        // Logo upload failed — not blocking, team already created
+      }
+    }
+
+    setIsLoading(false);
+
+    // 4. Redirect to TM portal
     const tmUrl =
       process.env.NODE_ENV === "development"
         ? "http://app.localhost.skrammm.com:3000/tm"
@@ -227,12 +265,61 @@ export function RegisterWizard() {
         </div>
       )}
 
-      {/* Step 1 — Club Info */}
+      {/* Step 1 — Club Info + Logo */}
       {step === 1 && (
         <div className="space-y-4">
           <h2 className="font-[family-name:var(--font-lexend)] font-extrabold tracking-tight text-lg">
             Club Information
           </h2>
+
+          {/* Logo upload */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-2">
+              Club logo{" "}
+              <span className="text-muted-foreground text-xs">(optional)</span>
+            </label>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-20 h-20 rounded-full border-2 border-dashed border-border hover:border-primary transition-colors overflow-hidden bg-muted flex items-center justify-center flex-shrink-0"
+              >
+                {logoPreview ? (
+                  <img
+                    src={logoPreview}
+                    alt="Logo preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-3xl text-muted-foreground/50">+</span>
+                )}
+              </button>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>Tap to upload your club crest or logo.</p>
+                <p>JPG, PNG or WebP. Shown on the map and directory.</p>
+                {logoPreview && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoFile(null);
+                      setLogoPreview(null);
+                    }}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoChange}
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">
               Club name <span className="text-red-500">*</span>
@@ -249,7 +336,9 @@ export function RegisterWizard() {
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">
               Description{" "}
-              <span className="text-muted-foreground text-xs">(optional, max 500 chars)</span>
+              <span className="text-muted-foreground text-xs">
+                (optional, max 500 chars)
+              </span>
             </label>
             <textarea
               name="description"
@@ -263,7 +352,8 @@ export function RegisterWizard() {
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">
-              Contact email <span className="text-muted-foreground text-xs">(optional)</span>
+              Contact email{" "}
+              <span className="text-muted-foreground text-xs">(optional)</span>
             </label>
             <input
               type="email"
@@ -276,7 +366,8 @@ export function RegisterWizard() {
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">
-              Contact phone <span className="text-muted-foreground text-xs">(optional)</span>
+              Contact phone{" "}
+              <span className="text-muted-foreground text-xs">(optional)</span>
             </label>
             <input
               type="tel"
@@ -320,7 +411,6 @@ export function RegisterWizard() {
             </button>
           </div>
 
-          {/* Geocode results */}
           {geoResults.length > 0 && (
             <ul className="border rounded divide-y text-sm max-h-48 overflow-y-auto">
               {geoResults.map((r, i) => (
@@ -336,7 +426,6 @@ export function RegisterWizard() {
             </ul>
           )}
 
-          {/* Map */}
           {location && (
             <div>
               <div className="h-52 rounded border overflow-hidden">
@@ -363,7 +452,10 @@ export function RegisterWizard() {
               ← Back
             </button>
             <button
-              onClick={() => { setError(null); setStep(3); }}
+              onClick={() => {
+                setError(null);
+                setStep(3);
+              }}
               className="flex-1 bg-primary text-primary-foreground font-bold py-2.5 rounded shadow-brutalist-navy-sm hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all"
             >
               Next →
@@ -400,7 +492,9 @@ export function RegisterWizard() {
                     </label>
                     <select
                       value={slot.dayOfWeek}
-                      onChange={(e) => updateSlot(i, "dayOfWeek", parseInt(e.target.value))}
+                      onChange={(e) =>
+                        updateSlot(i, "dayOfWeek", parseInt(e.target.value))
+                      }
                       className="border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary"
                     >
                       {DAY_NAMES.map((d, idx) => (
@@ -439,9 +533,7 @@ export function RegisterWizard() {
                     <input
                       type="text"
                       value={slot.venue ?? ""}
-                      onChange={(e) =>
-                        updateSlot(i, "venue", e.target.value || "")
-                      }
+                      onChange={(e) => updateSlot(i, "venue", e.target.value)}
                       placeholder="Field name or address"
                       className="border border-border rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary"
                     />
@@ -475,7 +567,10 @@ export function RegisterWizard() {
               ← Back
             </button>
             <button
-              onClick={() => { setError(null); setStep(4); }}
+              onClick={() => {
+                setError(null);
+                setStep(4);
+              }}
               className="flex-1 bg-primary text-primary-foreground font-bold py-2.5 rounded shadow-brutalist-navy-sm hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none transition-all"
             >
               Next →
@@ -492,14 +587,32 @@ export function RegisterWizard() {
           </h2>
 
           {/* Summary */}
-          <div className="bg-muted rounded p-3 text-sm space-y-1">
-            <p className="font-semibold text-foreground">{clubInfo.name}</p>
-            {location?.address && (
-              <p className="text-muted-foreground text-xs">📍 {location.address}</p>
-            )}
-            <p className="text-muted-foreground text-xs">
-              {trainingSlots.length} training slot{trainingSlots.length !== 1 ? "s" : ""}
-            </p>
+          <div className="bg-muted rounded p-3 text-sm space-y-2">
+            <div className="flex items-center gap-3">
+              {logoPreview ? (
+                <img
+                  src={logoPreview}
+                  alt="Logo"
+                  className="w-10 h-10 rounded-full object-cover flex-shrink-0 border-2 border-border"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-extrabold text-lg flex-shrink-0">
+                  {clubInfo.name[0] ?? "?"}
+                </div>
+              )}
+              <div>
+                <p className="font-semibold text-foreground">{clubInfo.name}</p>
+                {location?.address && (
+                  <p className="text-muted-foreground text-xs truncate">
+                    📍 {location.address}
+                  </p>
+                )}
+                <p className="text-muted-foreground text-xs">
+                  {trainingSlots.length} training slot
+                  {trainingSlots.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
           </div>
 
           <div>
@@ -529,7 +642,8 @@ export function RegisterWizard() {
           {otpSent && (
             <>
               <p className="text-sm text-muted-foreground">
-                A 6-digit code was sent to <span className="font-medium text-foreground">{email}</span>.
+                A 6-digit code was sent to{" "}
+                <span className="font-medium text-foreground">{email}</span>.
               </p>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">
@@ -557,7 +671,10 @@ export function RegisterWizard() {
           )}
 
           <button
-            onClick={() => { setError(null); setStep(3); }}
+            onClick={() => {
+              setError(null);
+              setStep(3);
+            }}
             className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             ← Back
