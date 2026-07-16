@@ -4,7 +4,9 @@ import { ClubDirectoryClient } from "./_client";
 import type { Route } from "next";
 import Link from "next/link";
 
-export const revalidate = 60;
+// Forces request-time rendering: the Docker build stage has no DATABASE_URL,
+// so this page cannot be statically prerendered at build time.
+export const dynamic = "force-dynamic";
 
 export default async function ClubsPage() {
   const clubs = await listPublicTeams();
